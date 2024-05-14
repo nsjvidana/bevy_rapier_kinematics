@@ -1,4 +1,7 @@
+use std::f32::consts::PI;
 use bevy::math::*;
+
+pub const FRAC_PI_12: f32 = PI/12.;
 
 /// Returns a rotation's right, up, and forward vectors from a given forward vector.
 /// The returned tuple is in the form: (right, up, fwd). Vectors are normalized.
@@ -31,4 +34,9 @@ pub fn rotation_from_right_up_fwd_unchecked(right: Vec3, up: Vec3, fwd: Vec3) ->
 pub fn rotation_from_fwd(fwd: Vec3) -> Quat {
     let tuple = get_rot_axes_from_forward(fwd);
     return rotation_from_right_up_fwd_unchecked(tuple.0, tuple.1, tuple.2);
+}
+
+#[inline(always)]
+pub fn vec3_y(y: f32) -> Vec3 {
+    Vec3::new(0., y, 0.)
 }
