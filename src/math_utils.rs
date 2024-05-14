@@ -12,8 +12,8 @@ pub fn get_rot_axes_from_forward(fwd: Vec3) -> (Vec3, Vec3, Vec3) {
     return (
         right,
         fwd.cross(right).normalize(), //up
-        fwd
-    )
+        fwd,
+    );
 }
 
 /// Creates a rotation from the given right-up-forward vectors without ensuring that they
@@ -22,7 +22,7 @@ pub fn rotation_from_right_up_fwd_unchecked(right: Vec3, up: Vec3, fwd: Vec3) ->
     let rot_mat = Mat3 {
         x_axis: right,
         y_axis: up,
-        z_axis: fwd
+        z_axis: fwd,
     };
     return Quat::from_mat3(&rot_mat);
 }
