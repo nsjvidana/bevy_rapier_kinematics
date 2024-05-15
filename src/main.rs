@@ -5,7 +5,7 @@ use bevy::math::primitives;
 use bevy::prelude::*;
 use bevy_flycam::{FlyCam, NoCameraPlayerPlugin, PlayerPlugin};
 use bevy_rapier3d::parry::shape::ShapeType::Cuboid;
-use bevy_rapier3d::plugin::RapierPhysicsPlugin;
+use bevy_rapier3d::plugin::{PhysicsSet, RapierPhysicsPlugin};
 use bevy_rapier3d::prelude::{Collider, FixedJoint, GenericJointBuilder, ImpulseJoint, JointAxis, MotorModel, RigidBody, SphericalJointBuilder};
 use bevy_rapier3d::render::RapierDebugRenderPlugin;
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, FRAC_PI_6, FRAC_PI_8, PI, TAU};
