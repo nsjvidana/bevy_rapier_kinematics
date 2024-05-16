@@ -5,25 +5,41 @@ use bevy::math::primitives;
 use bevy::prelude::*;
 use bevy_flycam::{FlyCam, NoCameraPlayerPlugin, PlayerPlugin};
 use bevy_rapier3d::parry::shape::ShapeType::Cuboid;
-use bevy_rapier3d::plugin::{PhysicsSet, RapierPhysicsPlugin};
-use bevy_rapier3d::prelude::{Collider, FixedJoint, GenericJointBuilder, ImpulseJoint, JointAxis, MotorModel, RigidBody, SphericalJointBuilder};
-use bevy_rapier3d::render::RapierDebugRenderPlugin;
+use bevy_rapier3d::plugin::{PhysicsSet, RapierContext, RapierPhysicsPlugin};
+use bevy_rapier3d::prelude::{Collider, FixedJoint, GenericJointBuilder, ImpulseJoint, JointAxesMask, JointAxis, MotorModel, RapierMultibodyJointHandle, RigidBody, SphericalJointBuilder};
+use bevy_rapier3d::render::{DebugRenderMode, RapierDebugRenderPlugin};
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, FRAC_PI_6, FRAC_PI_8, PI, TAU};
+use std::ops::Mul;
 use bevy_rapier3d::dynamics::MultibodyJoint;
+use bevy_rapier3d::na::Vector;
 
 fn main() {
-    App::new()
-        .add_plugins((
+    let mut app = App::new();
+    app.add_plugins((
             DefaultPlugins,
             NoCameraPlayerPlugin,
             RapierPhysicsPlugin::<()>::default(),
-            RapierDebugRenderPlugin::default(),
+            RapierDebugRenderPlugin {
+                style: default(),
+                mode: {
+                    let mut mode = DebugRenderMode::default();
+                    mode.set(DebugRenderMode::JOINTS, true);
+                    mode
+                },
+                enabled: true,
+            },
         ))
-        .add_systems(Startup, test_system)
-        .run();
+        .add_systems(Startup, test_startup)
+        .add_systems(Update, test_update);
+
+    let mut movement_settings = app.world.get_resource_mut::<bevy_flycam::MovementSettings>().unwrap();
+    movement_settings.speed = 3.;
+
+
+    app.run();
 }
 
-fn test_system(
+fn test_startup (
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -83,6 +99,8 @@ fn test_system(
     ));
     let torso = torso_cmd.id();
 
+    let joint_builder = GenericJointBuilder::new(JointAxesMask::LOCKED_SPHERICAL_AXES);
+
     //TODO: use generic joint for more freedom over joint control
     let r_shoulder_builder = SphericalJointBuilder::new()
         .local_anchor1(vec3_y(torso_shape.half_length + torso_shape.radius))
@@ -98,4 +116,24 @@ fn test_system(
         r_shoulder,
     ));
     let r_upper = r_upper_cmd.id();
+}
+
+fn test_update(
+    mut rapier_context: ResMut<RapierContext>,
+    mut gizmos: Gizmos,
+    query: Query<(&RapierMultibodyJointHandle)>
+) {
+    let mb_joints = &mut rapier_context.multibody_joints;
+    for (handle) in query.iter() {
+        let joint = mb_joints.get_mut(handle.0).unwrap().0;
+        if joint.num_links() == 0 { continue; }
+        let joint_world_mat = joint.link(0).unwrap().local_to_world();
+        let rot = joint_world_mat.rotation;
+        let fwd = rot.mul(Vector::new(0., 0., 1.));
+        gizmos.ray(
+            Vec3::new(joint_world_mat.translation.x, joint_world_mat.translation.y, joint_world_mat.translation.z),
+            fwd,
+            Color::rgb(1., 1., 1.)
+        );
+    }
 }
