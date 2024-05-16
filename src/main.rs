@@ -11,6 +11,7 @@ use bevy_rapier3d::render::{DebugRenderMode, RapierDebugRenderPlugin};
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, FRAC_PI_6, FRAC_PI_8, PI, TAU};
 use std::ops::Mul;
 use bevy_rapier3d::dynamics::MultibodyJoint;
+use bevy_rapier3d::math::Rot;
 use bevy_rapier3d::na::Vector;
 
 fn main() {
@@ -99,7 +100,11 @@ fn test_startup (
     ));
     let torso = torso_cmd.id();
 
-    let joint_builder = GenericJointBuilder::new(JointAxesMask::LOCKED_SPHERICAL_AXES);
+    let r_shoulder_builder = GenericJointBuilder::new(JointAxesMask::LOCKED_SPHERICAL_AXES)
+        .local_anchor1(vec3_y(torso_shape.half_length + torso_shape.radius))
+        .local_anchor2(vec3_y(segment_shape.half_length + segment_shape.radius))
+        .set_motor(JointAxis::AngZ, FRAC_PI_2, PI/10., 0.5, 0.05)
+        .limits(JointAxis::AngZ, [FRAC_PI_12, PI-FRAC_PI_12]);
 
     //TODO: use generic joint for more freedom over joint control
     let r_shoulder_builder = SphericalJointBuilder::new()
@@ -121,19 +126,12 @@ fn test_startup (
 fn test_update(
     mut rapier_context: ResMut<RapierContext>,
     mut gizmos: Gizmos,
-    query: Query<(&RapierMultibodyJointHandle)>
+    joint_q: Query<(&RapierMultibodyJointHandle, &MultibodyJoint, Entity)>,
 ) {
     let mb_joints = &mut rapier_context.multibody_joints;
-    for (handle) in query.iter() {
+    for (handle, joint_cmp, child) in joint_q.iter() {
         let joint = mb_joints.get_mut(handle.0).unwrap().0;
         if joint.num_links() == 0 { continue; }
-        let joint_world_mat = joint.link(0).unwrap().local_to_world();
-        let rot = joint_world_mat.rotation;
-        let fwd = rot.mul(Vector::new(0., 0., 1.));
-        gizmos.ray(
-            Vec3::new(joint_world_mat.translation.x, joint_world_mat.translation.y, joint_world_mat.translation.z),
-            fwd,
-            Color::rgb(1., 1., 1.)
-        );
+        let parent = joint_cmp.parent;
     }
 }
