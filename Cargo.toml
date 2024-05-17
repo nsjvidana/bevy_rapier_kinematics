@@ -8,6 +8,7 @@ bevy_dylib = "0.13.2"
 bevy = "0.13.2"
 bevy_flycam = "0.13.0"
 bevy_rapier3d = "0.26.0"
+bevy-inspector-egui = "0.24.0"
 
 [profile.dev]
-opt-level = 3
+opt-level = 1

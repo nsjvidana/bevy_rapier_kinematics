@@ -10,9 +10,10 @@ use bevy_rapier3d::prelude::{Collider, FixedJoint, GenericJointBuilder, ImpulseJ
 use bevy_rapier3d::render::{DebugRenderMode, RapierDebugRenderPlugin};
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, FRAC_PI_6, FRAC_PI_8, PI, TAU};
 use std::ops::Mul;
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::dynamics::MultibodyJoint;
 use bevy_rapier3d::math::Rot;
-use bevy_rapier3d::na::Vector;
+use bevy_rapier3d::na::{UnitQuaternion, Vector};
 
 fn main() {
     let mut app = App::new();
@@ -29,6 +30,7 @@ fn main() {
                 },
                 enabled: true,
             },
+            WorldInspectorPlugin::default()
         ))
         .add_systems(Startup, test_startup)
         .add_systems(Update, test_update);
@@ -132,5 +134,12 @@ fn test_update(
     for (handle) in joint_q.iter() {
         let joint = mb_joints.get_mut(handle.0).unwrap().0;
         if joint.num_links() == 0 { continue; }
+        let link = joint.link_mut(0).unwrap();
+        // link.joint.data.local_frame1.rotation = UnitQuaternion::.();
+        gizmos.ray(
+            link.local_to_world().translation.into(),
+            link.joint.data.local_axis2().into(),
+            Color::WHITE
+        );
     }
 }
