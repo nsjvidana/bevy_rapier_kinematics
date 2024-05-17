@@ -126,12 +126,11 @@ fn test_startup (
 fn test_update(
     mut rapier_context: ResMut<RapierContext>,
     mut gizmos: Gizmos,
-    joint_q: Query<(&RapierMultibodyJointHandle, &MultibodyJoint, Entity)>,
+    joint_q: Query<(&RapierMultibodyJointHandle)>,
 ) {
     let mb_joints = &mut rapier_context.multibody_joints;
-    for (handle, joint_cmp, child) in joint_q.iter() {
+    for (handle) in joint_q.iter() {
         let joint = mb_joints.get_mut(handle.0).unwrap().0;
         if joint.num_links() == 0 { continue; }
-        let parent = joint_cmp.parent;
     }
 }
