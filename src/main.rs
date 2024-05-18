@@ -112,7 +112,7 @@ fn test_startup (
     let r_shoulder_builder = SphericalJointBuilder::new()
         .local_anchor1(vec3_y(torso_shape.half_length + torso_shape.radius))
         .local_anchor2(vec3_y(segment_shape.half_length + segment_shape.radius))
-        .motor(JointAxis::AngZ, FRAC_PI_2, PI/10., 0.5, 0.05)
+        // .motor(JointAxis::AngZ, FRAC_PI_2, PI/10., 0.5, 0.05)
         .limits(JointAxis::AngZ, [FRAC_PI_12, PI-FRAC_PI_12]);
     let mut r_shoulder = MultibodyJoint::new(torso, r_shoulder_builder);
     r_shoulder.data.set_contacts_enabled(false);
@@ -132,10 +132,12 @@ fn test_update(
 ) {
     let mb_joints = &mut rapier_context.multibody_joints;
     for (handle) in joint_q.iter() {
-        let joint = mb_joints.get_mut(handle.0).unwrap().0;
-        if joint.num_links() == 0 { continue; }
-        let link = joint.link_mut(0).unwrap();
+        let mb = mb_joints.get_mut(handle.0).unwrap().0;
+        if mb.num_links() < 2 { continue; }
+        let link = mb.link_mut(1).unwrap();
         // link.joint.data.local_frame1.rotation = UnitQuaternion::.();
+        link.joint.data.local_frame1.rotation = UnitQuaternion::identity();
+        link.joint.data.local_frame2.rotation = UnitQuaternion::identity();
         gizmos.ray(
             link.local_to_world().translation.into(),
             link.joint.data.local_axis2().into(),
