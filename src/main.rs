@@ -1,18 +1,21 @@
 mod math_utils;
 
+use std::f32::consts::{FRAC_PI_2, PI};
 pub use bevy_rapier3d::na as nalgebra;
 
-use crate::math_utils::{FRAC_PI_12, rotation_from_fwd, vec3_y};
+use crate::math_utils::{FRAC_PI_12, get_rot_axes, rotation_from_fwd, vec3_y};
 use bevy::prelude::*;
 use bevy_flycam::{FlyCam, NoCameraPlayerPlugin};
 use bevy_rapier3d::plugin::{RapierContext, RapierPhysicsPlugin};
-use bevy_rapier3d::prelude::{Collider, FixedJoint, ImpulseJoint, JointAxis, RapierMultibodyJointHandle, RigidBody, Sleeping, SphericalJointBuilder};
+use bevy_rapier3d::prelude::{Collider, FixedJoint, GenericJointBuilder, ImpulseJoint, JointAxis, RapierMultibodyJointHandle, RigidBody, Sleeping, SphericalJointBuilder};
 use bevy_rapier3d::render::{DebugRenderMode, RapierDebugRenderPlugin};
 use std::ops::Mul;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
-use bevy_rapier3d::dynamics::MultibodyJoint;
+use bevy_rapier3d::dynamics::{JointAxesMask, MultibodyJoint};
 use bevy_rapier3d::na::{Matrix4, UnitQuaternion};
-use crate::nalgebra::{Isometry, Translation, UnitVector3, Vector, Vector3};
+use bevy_rapier3d::parry::math::UnitVector;
+use bevy_rapier3d::rapier::utils::SimdBasis;
+use crate::nalgebra::{Isometry, Matrix3, Rotation3, Translation, UnitVector3, Vector, Vector3};
 
 fn main() {
     let mut app = App::new();
@@ -97,14 +100,17 @@ fn test_startup (
     ));
     let torso = torso_cmd.id();
 
+    let fwd = UnitVector3::new_normalize(Vector3::new(1., 1., 1.));
+    let rot = rotation_from_fwd(&fwd);
+
     //TODO: use generic joint for more freedom over joint control
-    let r_shoulder_builder = SphericalJointBuilder::new()
+    let r_shoulder_builder = GenericJointBuilder::new(JointAxesMask::LOCKED_SPHERICAL_AXES)
         .local_anchor1(vec3_y(torso_shape.half_length + torso_shape.radius))
         .local_anchor2(vec3_y(segment_shape.half_length + segment_shape.radius))
-        .motor(JointAxis::AngX, 90_f32.to_radians(), 5_f32.to_radians() , 1., 0.0)
-        .motor(JointAxis::AngY, 0., 5_f32.to_radians() , 1., 0.0)
-        .motor(JointAxis::AngZ, 0., 5_f32.to_radians() , 1., 0.0);
-        // .limits(JointAxis::AngZ, [FRAC_PI_12, PI-FRAC_PI_12]);
+        .local_basis1(rot.into())
+        .set_motor(JointAxis::AngX, 0., 0.01_f32.to_radians(), 1., 0.0)
+        .set_motor(JointAxis::AngY, 0., 0.01_f32.to_radians(), 1., 0.0)
+        .set_motor(JointAxis::AngZ, 0., 0.01_f32.to_radians(), 1., 0.0);
     let mut r_shoulder = MultibodyJoint::new(torso, r_shoulder_builder);
     r_shoulder.data.set_contacts_enabled(false);
     let r_upper_cmd = commands.spawn((
@@ -121,8 +127,7 @@ fn test_startup (
 fn test_update(
     mut rapier_context: ResMut<RapierContext>,
     mut gizmos: Gizmos,
-    mut joint_q: Query<(&RapierMultibodyJointHandle, &mut MultibodyJoint, &Transform)>,
-    transform_q: Query<&Transform>,
+    mut joint_q: Query<(&RapierMultibodyJointHandle, &mut MultibodyJoint)>,
     cam_q: Query<&Transform, With<FlyCam>>
 ) {
     let op = cam_q.get_single();
@@ -130,7 +135,7 @@ fn test_update(
     let cam_pos = Vector3::<f32>::from(op.unwrap().translation);
 
     let multibodies= &mut rapier_context.multibody_joints;
-    for (mb_handle, mut joint_cmp, transform) in joint_q.iter_mut() {
+    for (mb_handle, mut joint_cmp) in joint_q.iter_mut() {
 
         let mb = multibodies.get(mb_handle.0).unwrap();
         if mb.0.num_links() == 0 { continue; }
@@ -149,42 +154,34 @@ fn test_update(
         let rapier_joint = &link.joint.data;
         let joint_pos = link.local_to_world().rotation.mul(rapier_joint.local_frame2.translation.vector) + pos;
 
-        //link.local_to_world().rotation.inverse().mul(link.local_to_world() * joint.local_axis2()).into()
 
         let fwd = UnitVector3::new_normalize(cam_pos - joint_pos);
-        let rot = rotation_from_fwd(&fwd);
-        let axis = rot.axis().unwrap();
+        let (r, u, f) = get_rot_axes(&UnitQuaternion::face_towards(&fwd, &Vector::y()));
+        let rot_mat = Rotation3::from_matrix_unchecked(
+            Matrix3::from_columns(&[
+                r.into_inner(),
+                -f.into_inner(),
+                u.into_inner()
+            ])
+        );
+        let rot = UnitQuaternion::from_rotation_matrix(&rot_mat);
 
-        let par_transform = transform_q.get(joint_cmp.parent).unwrap();
-        let axis_vec3: Vec3 = axis.into();
-        joint_cmp.data.set_local_axis1(par_transform.rotation.inverse().mul(axis_vec3));
-
-        let mut stiffness= 0.;
-        let mut damping = 0.;
-        {
-            let motor = joint_cmp.data.motor(JointAxis::AngX).unwrap();
-            stiffness = motor.stiffness;
-            damping = motor.damping;
-        }
-        joint_cmp.data.set_motor_position(JointAxis::AngX, rot.angle(), stiffness, damping);
-        {
-            let motor = joint_cmp.data.motor(JointAxis::AngY).unwrap();
-            stiffness = motor.stiffness;
-            damping = motor.damping;
-        }
-        joint_cmp.data.set_motor_position(JointAxis::AngY, 0., stiffness, damping);
-        {
-            let motor = joint_cmp.data.motor(JointAxis::AngZ).unwrap();
-            stiffness = motor.stiffness;
-            damping = motor.damping;
-        }
-        joint_cmp.data.set_motor_position(JointAxis::AngZ, 0., stiffness, damping);
-
+        joint_cmp.data.set_local_basis1(rot.into());
 
         gizmos.ray(
             joint_pos.into(),
-            axis.into(),
-            Color::WHITE
+            joint_cmp.data.local_basis1().mul_vec3(Vec3::X),
+            Color::RED
+        );
+        gizmos.ray(
+            joint_pos.into(),
+            joint_cmp.data.local_basis1().mul_vec3(Vec3::Y),
+            Color::GREEN
+        );
+        gizmos.ray(
+            joint_pos.into(),
+            joint_cmp.data.local_basis1().mul_vec3(Vec3::Z),
+            Color::CYAN
         );
 
     }

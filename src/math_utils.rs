@@ -40,14 +40,23 @@ pub fn rot_mat_from_right_up_fwd(
 
 /// Creates a rotation that points an object in the given forward direction.
 pub fn rotation_from_fwd(fwd: &UnitVector3<Real>) -> UnitQuaternion<Real> {
-    let (right, up, fwd) = get_rot_axes_from_forward(fwd);
+    let basis = fwd.orthonormal_basis();
+
     let mat = Matrix3::from_columns(&[
-        -fwd.into_inner(),
-        up.into_inner(),
-        right.into_inner(),
+        -basis[1],
+        basis[0],
+        fwd.into_inner(),
     ]);
     let rot_mat = Rotation3::from_matrix_unchecked(mat);
     return UnitQuaternion::from_rotation_matrix(&rot_mat);
+}
+
+pub fn get_rot_axes(rot: &UnitQuaternion<Real>) -> (UnitVector3<Real>, UnitVector3<Real>, UnitVector3<Real>) {
+    return (
+        UnitVector3::new_unchecked(rot * Vector::x()),
+        UnitVector3::new_unchecked(rot * Vector::y()),
+        UnitVector3::new_unchecked(rot * Vector::z()),
+    );
 }
 
 #[inline(always)]
