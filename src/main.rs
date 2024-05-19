@@ -88,7 +88,7 @@ fn test_startup (
 
     let material = materials.add(Color::rgb(1., 0., 0.));
     let torso_cmd = commands.spawn((
-        RigidBody::Dynamic,
+        RigidBody::Fixed,
         PbrBundle {
             mesh: torso_mesh,
             material,
@@ -125,7 +125,7 @@ fn test_startup (
 }
 
 fn test_update(
-    mut rapier_context: ResMut<RapierContext>,
+    rapier_context: Res<RapierContext>,
     mut gizmos: Gizmos,
     mut joint_q: Query<(&RapierMultibodyJointHandle, &mut MultibodyJoint)>,
     cam_q: Query<&Transform, With<FlyCam>>
@@ -134,9 +134,8 @@ fn test_update(
     if op.is_err() { return; }
     let cam_pos = Vector3::<f32>::from(op.unwrap().translation);
 
-    let multibodies= &mut rapier_context.multibody_joints;
+    let multibodies= &rapier_context.multibody_joints;
     for (mb_handle, mut joint_cmp) in joint_q.iter_mut() {
-
         let mb = multibodies.get(mb_handle.0).unwrap();
         if mb.0.num_links() == 0 { continue; }
         let mut link = mb.0.link(0).unwrap();
