@@ -1,19 +1,18 @@
 mod math_utils;
 
-use crate::math_utils::{FRAC_PI_12, vec3_y};
-use bevy::math::primitives;
+pub use bevy_rapier3d::na as nalgebra;
+
+use crate::math_utils::{FRAC_PI_12, rotation_from_fwd, vec3_y};
 use bevy::prelude::*;
-use bevy_flycam::{FlyCam, NoCameraPlayerPlugin, PlayerPlugin};
-use bevy_rapier3d::parry::shape::ShapeType::Cuboid;
-use bevy_rapier3d::plugin::{PhysicsSet, RapierContext, RapierPhysicsPlugin};
-use bevy_rapier3d::prelude::{Collider, FixedJoint, GenericJointBuilder, ImpulseJoint, JointAxesMask, JointAxis, MotorModel, RapierMultibodyJointHandle, RigidBody, SphericalJointBuilder};
+use bevy_flycam::{FlyCam, NoCameraPlayerPlugin};
+use bevy_rapier3d::plugin::{RapierContext, RapierPhysicsPlugin};
+use bevy_rapier3d::prelude::{Collider, FixedJoint, ImpulseJoint, JointAxis, RapierMultibodyJointHandle, RigidBody, Sleeping, SphericalJointBuilder};
 use bevy_rapier3d::render::{DebugRenderMode, RapierDebugRenderPlugin};
-use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, FRAC_PI_6, FRAC_PI_8, PI, TAU};
 use std::ops::Mul;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::dynamics::MultibodyJoint;
-use bevy_rapier3d::math::Rot;
-use bevy_rapier3d::na::{UnitQuaternion, Vector};
+use bevy_rapier3d::na::{Matrix4, UnitQuaternion};
+use crate::nalgebra::{Isometry, Translation, UnitVector3, Vector, Vector3};
 
 fn main() {
     let mut app = App::new();
@@ -65,7 +64,7 @@ fn test_startup (
             mesh: meshes.add(bevy::prelude::Cuboid {
                 half_size: Vec3::new(10., 0.1, 10.),
             }),
-            material: materials.add(Color::rgb(128., 128., 128.)),
+            material: materials.add(Color::rgb(0.95, 0.95, 0.95)),
             transform: Transform::from_xyz(0., -1., 0.),
             ..default()
         },
@@ -85,35 +84,27 @@ fn test_startup (
     let torso_mesh = meshes.add(torso_shape);
 
     let material = materials.add(Color::rgb(1., 0., 0.));
-    let fixed_entity = commands.spawn((
-        RigidBody::Dynamic,
-        Transform::default(),
-    )).id();
     let torso_cmd = commands.spawn((
-        RigidBody::Dynamic,
+        RigidBody::Fixed,
         PbrBundle {
             mesh: torso_mesh,
             material,
             transform: Transform::default(),
             ..default()
         },
-        ImpulseJoint::new(fixed_entity, FixedJoint::default()),
         Collider::capsule_y(torso_shape.half_length, torso_shape.radius),
+        bevy::core::Name::new("Torso"),
     ));
     let torso = torso_cmd.id();
-
-    let r_shoulder_builder = GenericJointBuilder::new(JointAxesMask::LOCKED_SPHERICAL_AXES)
-        .local_anchor1(vec3_y(torso_shape.half_length + torso_shape.radius))
-        .local_anchor2(vec3_y(segment_shape.half_length + segment_shape.radius))
-        .set_motor(JointAxis::AngZ, FRAC_PI_2, PI/10., 0.5, 0.05)
-        .limits(JointAxis::AngZ, [FRAC_PI_12, PI-FRAC_PI_12]);
 
     //TODO: use generic joint for more freedom over joint control
     let r_shoulder_builder = SphericalJointBuilder::new()
         .local_anchor1(vec3_y(torso_shape.half_length + torso_shape.radius))
         .local_anchor2(vec3_y(segment_shape.half_length + segment_shape.radius))
-        // .motor(JointAxis::AngZ, FRAC_PI_2, PI/10., 0.5, 0.05)
-        .limits(JointAxis::AngZ, [FRAC_PI_12, PI-FRAC_PI_12]);
+        .motor(JointAxis::AngX, 90_f32.to_radians(), 5_f32.to_radians() , 1., 0.0)
+        .motor(JointAxis::AngY, 0., 5_f32.to_radians() , 1., 0.0)
+        .motor(JointAxis::AngZ, 0., 5_f32.to_radians() , 1., 0.0);
+        // .limits(JointAxis::AngZ, [FRAC_PI_12, PI-FRAC_PI_12]);
     let mut r_shoulder = MultibodyJoint::new(torso, r_shoulder_builder);
     r_shoulder.data.set_contacts_enabled(false);
     let r_upper_cmd = commands.spawn((
@@ -121,6 +112,8 @@ fn test_startup (
         Collider::capsule_y(segment_shape.half_length, segment_shape.radius),
         Transform::default(),
         r_shoulder,
+        bevy::core::Name::new("Upper"),
+        Sleeping::disabled()
     ));
     let r_upper = r_upper_cmd.id();
 }
@@ -128,20 +121,71 @@ fn test_startup (
 fn test_update(
     mut rapier_context: ResMut<RapierContext>,
     mut gizmos: Gizmos,
-    joint_q: Query<(&RapierMultibodyJointHandle)>,
+    mut joint_q: Query<(&RapierMultibodyJointHandle, &mut MultibodyJoint, &Transform)>,
+    transform_q: Query<&Transform>,
+    cam_q: Query<&Transform, With<FlyCam>>
 ) {
-    let mb_joints = &mut rapier_context.multibody_joints;
-    for (handle) in joint_q.iter() {
-        let mb = mb_joints.get_mut(handle.0).unwrap().0;
-        if mb.num_links() < 2 { continue; }
-        let link = mb.link_mut(1).unwrap();
-        // link.joint.data.local_frame1.rotation = UnitQuaternion::.();
-        link.joint.data.local_frame1.rotation = UnitQuaternion::identity();
-        link.joint.data.local_frame2.rotation = UnitQuaternion::identity();
+    let op = cam_q.get_single();
+    if op.is_err() { return; }
+    let cam_pos = Vector3::<f32>::from(op.unwrap().translation);
+
+    let multibodies= &mut rapier_context.multibody_joints;
+    for (mb_handle, mut joint_cmp, transform) in joint_q.iter_mut() {
+
+        let mb = multibodies.get(mb_handle.0).unwrap();
+        if mb.0.num_links() == 0 { continue; }
+        let mut link = mb.0.link(0).unwrap();
+        let mut found_link = false;
+        for l in mb.0.links() {
+            if l.joint.data.as_spherical().is_some() {
+                link = l;
+                found_link = true;
+                break;
+            }
+        }
+        if !found_link { continue; }
+
+        let pos = link.local_to_world().translation.vector;
+        let rapier_joint = &link.joint.data;
+        let joint_pos = link.local_to_world().rotation.mul(rapier_joint.local_frame2.translation.vector) + pos;
+
+        //link.local_to_world().rotation.inverse().mul(link.local_to_world() * joint.local_axis2()).into()
+
+        let fwd = UnitVector3::new_normalize(cam_pos - joint_pos);
+        let rot = rotation_from_fwd(&fwd);
+        let axis = rot.axis().unwrap();
+
+        let par_transform = transform_q.get(joint_cmp.parent).unwrap();
+        let axis_vec3: Vec3 = axis.into();
+        joint_cmp.data.set_local_axis1(par_transform.rotation.inverse().mul(axis_vec3));
+
+        let mut stiffness= 0.;
+        let mut damping = 0.;
+        {
+            let motor = joint_cmp.data.motor(JointAxis::AngX).unwrap();
+            stiffness = motor.stiffness;
+            damping = motor.damping;
+        }
+        joint_cmp.data.set_motor_position(JointAxis::AngX, rot.angle(), stiffness, damping);
+        {
+            let motor = joint_cmp.data.motor(JointAxis::AngY).unwrap();
+            stiffness = motor.stiffness;
+            damping = motor.damping;
+        }
+        joint_cmp.data.set_motor_position(JointAxis::AngY, 0., stiffness, damping);
+        {
+            let motor = joint_cmp.data.motor(JointAxis::AngZ).unwrap();
+            stiffness = motor.stiffness;
+            damping = motor.damping;
+        }
+        joint_cmp.data.set_motor_position(JointAxis::AngZ, 0., stiffness, damping);
+
+
         gizmos.ray(
-            link.local_to_world().translation.into(),
-            link.joint.data.local_axis2().into(),
+            joint_pos.into(),
+            axis.into(),
             Color::WHITE
         );
+
     }
 }
