@@ -88,7 +88,7 @@ fn test_startup (
 
     let material = materials.add(Color::rgb(1., 0., 0.));
     let torso_cmd = commands.spawn((
-        RigidBody::Fixed,
+        RigidBody::Dynamic,
         PbrBundle {
             mesh: torso_mesh,
             material,
@@ -108,9 +108,9 @@ fn test_startup (
         .local_anchor1(vec3_y(torso_shape.half_length + torso_shape.radius))
         .local_anchor2(vec3_y(segment_shape.half_length + segment_shape.radius))
         .local_basis1(rot.into())
-        .set_motor(JointAxis::AngX, 0., 0.01_f32.to_radians(), 1., 0.0)
-        .set_motor(JointAxis::AngY, 0., 0.01_f32.to_radians(), 1., 0.0)
-        .set_motor(JointAxis::AngZ, 0., 0.01_f32.to_radians(), 1., 0.0);
+        .set_motor(JointAxis::AngX, 0., 0.01_f32.to_radians(), 1., 0.01)
+        .set_motor(JointAxis::AngY, 0., 0.01_f32.to_radians(), 1., 0.01)
+        .set_motor(JointAxis::AngZ, 0., 0.01_f32.to_radians(), 1., 0.01);
     let mut r_shoulder = MultibodyJoint::new(torso, r_shoulder_builder);
     r_shoulder.data.set_contacts_enabled(false);
     let r_upper_cmd = commands.spawn((
@@ -166,7 +166,9 @@ fn test_update(
         );
         let rot = UnitQuaternion::from_rotation_matrix(&rot_mat);
 
-        joint_cmp.data.set_local_basis1(rot.into());
+        let par_rot = link.local_to_world().rotation * link.local_to_parent().rotation.inverse();
+
+        joint_cmp.data.set_local_basis1((par_rot.inverse() * rot).into());
 
         gizmos.ray(
             joint_pos.into(),
