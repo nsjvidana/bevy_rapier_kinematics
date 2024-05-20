@@ -1,9 +1,8 @@
 mod math_utils;
+mod arm;
 
-use std::f32::consts::{FRAC_PI_2, PI};
-pub use bevy_rapier3d::na as nalgebra;
 
-use crate::math_utils::{FRAC_PI_12, get_rot_axes, rotation_from_fwd, vec3_y};
+use crate::math_utils::{get_rot_axes, rotation_from_fwd, vec3_y};
 use bevy::prelude::*;
 use bevy_flycam::{FlyCam, NoCameraPlayerPlugin};
 use bevy_rapier3d::plugin::{RapierContext, RapierPhysicsPlugin};
@@ -12,10 +11,8 @@ use bevy_rapier3d::render::{DebugRenderMode, RapierDebugRenderPlugin};
 use std::ops::Mul;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::dynamics::{JointAxesMask, MultibodyJoint};
-use bevy_rapier3d::na::{Matrix4, UnitQuaternion};
-use bevy_rapier3d::parry::math::UnitVector;
+use bevy_rapier3d::na::{Matrix3, Rotation3, UnitQuaternion, UnitVector3, Vector, Vector3};
 use bevy_rapier3d::rapier::utils::SimdBasis;
-use crate::nalgebra::{Isometry, Matrix3, Rotation3, Translation, UnitVector3, Vector, Vector3};
 
 fn main() {
     let mut app = App::new();
