@@ -1,5 +1,6 @@
 mod math_utils;
 mod arm;
+mod ik;
 
 
 use crate::math_utils::{get_rot_axes, rotation_from_fwd, vec3_y};
