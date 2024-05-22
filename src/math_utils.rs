@@ -3,6 +3,7 @@ use bevy::math::*;
 use bevy_rapier3d::na::{Matrix3, UnitQuaternion, UnitVector3, Vector, Vector3, ArrayStorage, Rotation3};
 use bevy_rapier3d::parry::math::Real;
 use bevy_rapier3d::rapier::utils::SimdBasis;
+use k::{RealField, SubsetOf};
 
 pub const FRAC_PI_12: f32 = PI/12.;
 

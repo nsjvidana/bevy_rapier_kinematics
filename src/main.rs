@@ -1,6 +1,7 @@
 mod math_utils;
 mod arm;
 mod ik;
+mod ik_systems;
 
 
 use crate::math_utils::{get_rot_axes, rotation_from_fwd, vec3_y};
@@ -13,7 +14,8 @@ use std::ops::Mul;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::dynamics::{JointAxesMask, MultibodyJoint};
 use bevy_rapier3d::na::{Matrix3, Rotation3, UnitQuaternion, UnitVector3, Vector, Vector3};
-use bevy_rapier3d::rapier::utils::SimdBasis;
+use crate::arm::ArmInfo;
+use crate::ik::{IKPlugin, UninitIKArmBundle};
 
 fn main() {
     let mut app = App::new();
@@ -30,10 +32,12 @@ fn main() {
                 },
                 enabled: true,
             },
-            WorldInspectorPlugin::default()
+            WorldInspectorPlugin::default(),
+            IKPlugin,
         ))
         .add_systems(Startup, test_startup)
-        .add_systems(Update, test_update);
+        // .add_systems(Update, test_update)
+        ;
 
     let mut movement_settings = app.world.get_resource_mut::<bevy_flycam::MovementSettings>().unwrap();
     movement_settings.speed = 3.;
@@ -120,6 +124,24 @@ fn test_startup (
         Sleeping::disabled()
     ));
     let r_upper = r_upper_cmd.id();
+    let r_lower = commands.spawn((
+        RigidBody::Dynamic,
+        Collider::capsule_y(segment_shape.half_length, segment_shape.radius),
+        Transform::default(),
+        r_shoulder,
+        bevy::core::Name::new("Upper"),
+        Sleeping::disabled()
+    )).id();
+    
+    let arm_entity = commands.spawn(
+        UninitIKArmBundle {
+            arm_info: ArmInfo {
+                upper_arm: r_upper,
+                lower_arm: r_lower,
+            },
+            ..UninitIKArmBundle::<f32>::default()
+        }
+    );
 }
 
 fn test_update(
