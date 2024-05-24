@@ -14,8 +14,8 @@ use std::ops::Mul;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::dynamics::{JointAxesMask, MultibodyJoint};
 use bevy_rapier3d::na::{Matrix3, Rotation3, UnitQuaternion, UnitVector3, Vector, Vector3};
-use crate::arm::ArmInfo;
-use crate::ik::{IKPlugin, UninitIKArmBundle};
+use crate::arm::{ArmInfo, CapsuleSegmentBundle};
+use crate::ik::{IKPlugin, IKArmBundle, IKArm};
 
 fn main() {
     let mut app = App::new();
@@ -116,32 +116,26 @@ fn test_startup (
     let mut r_shoulder = MultibodyJoint::new(torso, r_shoulder_builder);
     r_shoulder.data.set_contacts_enabled(false);
     let r_upper_cmd = commands.spawn((
-        RigidBody::Dynamic,
-        Collider::capsule_y(segment_shape.half_length, segment_shape.radius),
-        Transform::default(),
+        CapsuleSegmentBundle::new(segment_shape),
         r_shoulder,
-        bevy::core::Name::new("Upper"),
-        Sleeping::disabled()
+        bevy::core::Name::new("Upper")
     ));
     let r_upper = r_upper_cmd.id();
     let r_lower = commands.spawn((
-        RigidBody::Dynamic,
-        Collider::capsule_y(segment_shape.half_length, segment_shape.radius),
-        Transform::default(),
+        CapsuleSegmentBundle::new(segment_shape),
         r_shoulder,
-        bevy::core::Name::new("Upper"),
-        Sleeping::disabled()
+        bevy::core::Name::new("Lower")
     )).id();
     
-    let arm_entity = commands.spawn(
-        UninitIKArmBundle {
-            arm_info: ArmInfo {
-                upper_arm: r_upper,
-                lower_arm: r_lower,
-            },
-            ..UninitIKArmBundle::<f32>::default()
-        }
-    );
+    // let arm_entity = commands.spawn(
+    //     IKArmBundle::<f32> {
+    //         arm_info: ArmInfo {
+    //             upper_arm: r_upper,
+    //             lower_arm: r_lower,
+    //         },
+    //         ..default()
+    //     }
+    // );
 }
 
 fn test_update(
