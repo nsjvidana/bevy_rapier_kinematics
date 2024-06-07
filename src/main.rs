@@ -16,6 +16,7 @@ use bevy_rapier3d::dynamics::{JointAxesMask, MultibodyJoint};
 use bevy_rapier3d::na::{Matrix3, Rotation3, UnitQuaternion, UnitVector3, Vector, Vector3};
 use crate::arm::{ArmInfo, CapsuleSegmentBundle};
 use crate::ik::{IKPlugin, IKArmBundle, IKArm};
+use crate::ik_systems::set_ik_arm_positions;
 
 fn main() {
     let mut app = App::new();
@@ -37,6 +38,7 @@ fn main() {
         ))
         .add_systems(Startup, test_startup)
         // .add_systems(Update, test_update)
+        .add_systems(PostUpdate, set_ik_arm_positions)
         ;
 
     let mut movement_settings = app.world.get_resource_mut::<bevy_flycam::MovementSettings>().unwrap();
@@ -127,15 +129,9 @@ fn test_startup (
         bevy::core::Name::new("Lower")
     )).id();
     
-    // let arm_entity = commands.spawn(
-    //     IKArmBundle::<f32> {
-    //         arm_info: ArmInfo {
-    //             upper_arm: r_upper,
-    //             lower_arm: r_lower,
-    //         },
-    //         ..default()
-    //     }
-    // );
+    let arm_entity = commands.spawn(
+        IKArmBundle::<bevy_rapier3d::parry::math::Real>::new(r_upper, r_lower)
+    );
 }
 
 fn test_update(
