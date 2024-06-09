@@ -1,43 +1,39 @@
 mod math_utils;
-mod arm;
 mod ik;
 mod ik_systems;
-
+mod arm;
 
 use crate::math_utils::{get_rot_axes, rotation_from_fwd, vec3_y};
 use bevy::prelude::*;
 use bevy_flycam::{FlyCam, NoCameraPlayerPlugin};
 use bevy_rapier3d::plugin::{RapierContext, RapierPhysicsPlugin};
-use bevy_rapier3d::prelude::{Collider, FixedJoint, GenericJointBuilder, ImpulseJoint, JointAxis, RapierMultibodyJointHandle, RigidBody, Sleeping, SphericalJointBuilder};
+use bevy_rapier3d::prelude::{Collider, GenericJointBuilder, JointAxis, RapierMultibodyJointHandle, RigidBody, Sleeping};
 use bevy_rapier3d::render::{DebugRenderMode, RapierDebugRenderPlugin};
 use std::ops::Mul;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::dynamics::{JointAxesMask, MultibodyJoint};
-use bevy_rapier3d::na::{Matrix3, Rotation3, UnitQuaternion, UnitVector3, Vector, Vector3};
-use crate::arm::{ArmInfo, CapsuleSegmentBundle};
-use crate::ik::{IKPlugin, IKArmBundle, IKArm};
+use bevy_rapier3d::na::{UnitQuaternion, Matrix3, Rotation3, UnitVector3, Vector, Vector3};
 use crate::ik_systems::set_ik_arm_positions;
 
 fn main() {
     let mut app = App::new();
     app.add_plugins((
-            DefaultPlugins,
-            NoCameraPlayerPlugin,
-            RapierPhysicsPlugin::<()>::default(),
-            RapierDebugRenderPlugin {
-                style: default(),
-                mode: {
-                    let mut mode = DebugRenderMode::default();
-                    mode.set(DebugRenderMode::JOINTS, true);
-                    mode
-                },
-                enabled: true,
+        DefaultPlugins,
+        NoCameraPlayerPlugin,
+        RapierPhysicsPlugin::<()>::default(),
+        RapierDebugRenderPlugin {
+            style: default(),
+            mode: {
+                let mut mode = DebugRenderMode::default();
+                mode.set(DebugRenderMode::JOINTS, true);
+                mode
             },
-            WorldInspectorPlugin::default(),
-            IKPlugin,
-        ))
+            enabled: true,
+        },
+        WorldInspectorPlugin::default()
+    ))
         .add_systems(Startup, test_startup)
-        // .add_systems(Update, test_update)
+        .add_systems(Update, test_update)
         .add_systems(PostUpdate, set_ik_arm_positions)
         ;
 
@@ -92,7 +88,7 @@ fn test_startup (
 
     let material = materials.add(Color::rgb(1., 0., 0.));
     let torso_cmd = commands.spawn((
-        RigidBody::Fixed,
+        RigidBody::Dynamic,
         PbrBundle {
             mesh: torso_mesh,
             material,
@@ -118,24 +114,18 @@ fn test_startup (
     let mut r_shoulder = MultibodyJoint::new(torso, r_shoulder_builder);
     r_shoulder.data.set_contacts_enabled(false);
     let r_upper_cmd = commands.spawn((
-        CapsuleSegmentBundle::new(segment_shape),
+        RigidBody::Dynamic,
+        Collider::capsule_y(segment_shape.half_length, segment_shape.radius),
+        Transform::default(),
         r_shoulder,
-        bevy::core::Name::new("Upper")
+        bevy::core::Name::new("Upper"),
+        Sleeping::disabled()
     ));
     let r_upper = r_upper_cmd.id();
-    let r_lower = commands.spawn((
-        CapsuleSegmentBundle::new(segment_shape),
-        r_shoulder,
-        bevy::core::Name::new("Lower")
-    )).id();
-    
-    let arm_entity = commands.spawn(
-        IKArmBundle::<bevy_rapier3d::parry::math::Real>::new(r_upper, r_lower)
-    );
 }
 
 fn test_update(
-    rapier_context: Res<RapierContext>,
+    mut rapier_context: ResMut<RapierContext>,
     mut gizmos: Gizmos,
     mut joint_q: Query<(&RapierMultibodyJointHandle, &mut MultibodyJoint)>,
     cam_q: Query<&Transform, With<FlyCam>>
@@ -144,8 +134,9 @@ fn test_update(
     if op.is_err() { return; }
     let cam_pos = Vector3::<f32>::from(op.unwrap().translation);
 
-    let multibodies= &rapier_context.multibody_joints;
+    let multibodies= &mut rapier_context.multibody_joints;
     for (mb_handle, mut joint_cmp) in joint_q.iter_mut() {
+
         let mb = multibodies.get(mb_handle.0).unwrap();
         if mb.0.num_links() == 0 { continue; }
         let mut link = mb.0.link(0).unwrap();
