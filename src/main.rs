@@ -108,7 +108,7 @@ fn test_startup (
         .local_anchor1(vec3_y(torso_shape.half_length + torso_shape.radius))
         .local_anchor2(vec3_y(segment_shape.half_length + segment_shape.radius))
         .local_basis1(rot.into())
-        .set_motor(JointAxis::AngX, 0., 0.01_f32.to_radians(), 1., 0.01)
+        .set_motor(JointAxis::AngX, -90_f32.to_radians(), 0.01_f32.to_radians(), 1., 0.01)
         .set_motor(JointAxis::AngY, 0., 0.01_f32.to_radians(), 1., 0.01)
         .set_motor(JointAxis::AngZ, 0., 0.01_f32.to_radians(), 1., 0.01);
     let mut r_shoulder = MultibodyJoint::new(torso, r_shoulder_builder);
@@ -156,18 +156,8 @@ fn test_update(
 
 
         let fwd = UnitVector3::new_normalize(cam_pos - joint_pos);
-        let (r, u, f) = get_rot_axes(&UnitQuaternion::face_towards(&fwd, &Vector::y()));
-        let rot_mat = Rotation3::from_matrix_unchecked(
-            Matrix3::from_columns(&[
-                r.into_inner(),
-                -f.into_inner(),
-                u.into_inner()
-            ])
-        );
-        let rot = UnitQuaternion::from_rotation_matrix(&rot_mat);
-
+        let rot = UnitQuaternion::face_towards(&fwd, &Vector::y());
         let par_rot = link.local_to_world().rotation * link.local_to_parent().rotation.inverse();
-
         joint_cmp.data.set_local_basis1((par_rot.inverse() * rot).into());
 
         gizmos.ray(
