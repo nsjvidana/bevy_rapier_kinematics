@@ -24,7 +24,7 @@ pub struct IKArm<T: RealField> {
     pub chain: SerialChain<T>,
     pub ik_solver: JacobianIkSolver<T>,
     pub target_pos: Option<Vector3<T>>,
-    pub elbow_ik_pole: Option<Vector3<T>>,
+    pub elbow_ik_pole: Option<Entity>,
 }
 
 impl<T> IKArm<T>
