@@ -867,6 +867,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_rapier_kinematics"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy-inspector-egui",
+ "bevy-trait-query",
+ "bevy_flycam",
+ "bevy_rapier3d",
+ "k",
+]
+
+[[package]]
 name = "bevy_reflect"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -952,18 +964,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.61",
-]
-
-[[package]]
-name = "bevy_robot_kinematics"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bevy-inspector-egui",
- "bevy-trait-query",
- "bevy_flycam",
- "bevy_rapier3d",
- "k",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 [package]
-name = "bevy_robot_kinematics"
+name = "bevy_rapier_kinematics"
 version = "0.1.0"
 edition = "2021"
 
