@@ -10,7 +10,7 @@ use bevy_flycam::{FlyCam, NoCameraPlayerPlugin};
 use bevy_rapier3d::plugin::{RapierContext, RapierPhysicsPlugin};
 use bevy_rapier3d::prelude::{Collider, FixedJointBuilder, GenericJoint, GenericJointBuilder, ImpulseJoint, JointAxis, RapierMultibodyJointHandle, RevoluteJointBuilder, RigidBody, Rot, Sleeping, Vect};
 use bevy_rapier3d::render::{DebugRenderMode, RapierDebugRenderPlugin};
-use std::ops::Mul;
+use std::ops::{Deref, Mul};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::dynamics::{JointAxesMask, MultibodyJoint};
 use bevy_rapier3d::na::{UnitQuaternion, Matrix3, Rotation3, UnitVector3, Vector, Vector3};
@@ -277,8 +277,11 @@ fn test_startup2(
     };
     let upper_arm = commands.spawn((
         RigidBody::Dynamic,
-        MultibodyJoint::new(shoulder_z, FixedJointBuilder::new()
-            .local_anchor2(vec3_y(segment_shape.half_length+radius))),
+        MultibodyJoint::new(shoulder_z, *FixedJointBuilder::new()
+            .local_anchor2(vec3_y(segment_shape.half_length+radius))
+            .build()
+            .set_contacts_enabled(false)
+        ),
         Collider::capsule_y(segment_shape.half_length, radius),
     )).id();
 
@@ -311,8 +314,11 @@ fn test_startup2(
 
     let lower_arm = commands.spawn((
         RigidBody::Dynamic,
-        MultibodyJoint::new(elb_z, FixedJointBuilder::new()
-            .local_anchor2(vec3_y(segment_shape.half_length+radius))),
+        MultibodyJoint::new(elb_z, *FixedJointBuilder::new()
+            .local_anchor2(vec3_y(segment_shape.half_length+radius))
+            .build()
+            .set_contacts_enabled(false)
+        ),
         Collider::capsule_y(segment_shape.half_length, radius),
     )).id();
 }
