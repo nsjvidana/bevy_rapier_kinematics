@@ -20,14 +20,14 @@ impl Plugin for IKPlugin {
 
 
 #[derive(Component)]
-pub struct IKArm<T: RealField> {
+pub struct JacobianIKArm<T: RealField> {
     pub chain: SerialChain<T>,
     pub ik_solver: JacobianIkSolver<T>,
     pub target_pos: Option<Vector3<T>>,
     pub elbow_ik_pole: Option<Entity>,
 }
 
-impl<T> IKArm<T>
+impl<T> JacobianIKArm<T>
 where
     T: RealField + SubsetOf<f64>
 {
@@ -36,7 +36,7 @@ where
     }
 }
 
-impl<T> Default for IKArm<T> 
+impl<T> Default for JacobianIKArm<T>
 where 
     T: RealField + SubsetOf<f64>
 {
@@ -90,27 +90,31 @@ where
 }
 
 #[derive(Bundle)]
-pub struct IKArmBundle<T: RealField> {
+pub struct JacobianIKArmBundle<T: RealField> {
     pub arm_info: ArmInfo,
-    pub ik_arm: IKArm<T>,
+    pub ik_arm: JacobianIKArm<T>,
 }
 
-impl<T> IKArmBundle<T>
+impl<T> JacobianIKArmBundle<T>
 where 
     T: RealField + SubsetOf<f64>
 {
-    pub fn new(upper_arm: Entity, lower_arm: Entity) -> Self {
+    pub fn new(upper_arm: Entity, lower_arm: Entity, torso: Entity, elbow_ik_pole: Entity) -> Self {
         Self {
             arm_info: ArmInfo {
                 upper_arm,
-                lower_arm
+                lower_arm,
+                torso,
             },
-            ik_arm: default(),
+            ik_arm: JacobianIKArm {
+                elbow_ik_pole: Some(elbow_ik_pole),
+                ..default()
+            },
         }
     }
 }
 
-impl<T> Default for IKArmBundle<T>
+impl<T> Default for JacobianIKArmBundle<T>
 where
     T: RealField + SubsetOf<f64>
 {

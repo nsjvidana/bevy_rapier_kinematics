@@ -6,13 +6,15 @@ use bevy_rapier3d::prelude::{Collider, RigidBody};
 pub struct ArmInfo {
     pub upper_arm: Entity,
     pub lower_arm: Entity,
+    pub torso: Entity,
 }
 
 impl Default for ArmInfo {
     fn default() -> Self {
         Self {
             upper_arm: Entity::PLACEHOLDER,
-            lower_arm: Entity::PLACEHOLDER
+            lower_arm: Entity::PLACEHOLDER,
+            torso: Entity::PLACEHOLDER
         }
     }
 }

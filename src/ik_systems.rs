@@ -3,10 +3,10 @@ use bevy::prelude::{Commands, Entity, Query, Transform, Vec3};
 use bevy_rapier3d::na::Vector3;
 use bevy_rapier3d::parry::math::Real;
 use crate::arm::{ArmInfo, BodySegment};
-use crate::ik::{IKArm};
+use crate::ik::{JacobianIKArm};
 
 pub fn set_ik_arm_positions(
-    mut ik_arm_q: Query<(&ArmInfo, &mut IKArm<Real>)>,
+    mut ik_arm_q: Query<(&ArmInfo, &mut JacobianIKArm<Real>)>,
     body_segment_q: Query<(&dyn BodySegment, &Transform)>,
     transform_q: Query<&Transform>
 ) {

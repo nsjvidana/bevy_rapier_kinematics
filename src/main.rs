@@ -3,16 +3,18 @@ mod ik;
 mod ik_systems;
 mod arm;
 
+use std::f32::consts::{FRAC_2_PI, FRAC_PI_2};
 use crate::math_utils::{get_rot_axes, rotation_from_fwd, vec3_y};
 use bevy::prelude::*;
 use bevy_flycam::{FlyCam, NoCameraPlayerPlugin};
 use bevy_rapier3d::plugin::{RapierContext, RapierPhysicsPlugin};
-use bevy_rapier3d::prelude::{Collider, GenericJointBuilder, JointAxis, RapierMultibodyJointHandle, RigidBody, Sleeping};
+use bevy_rapier3d::prelude::{Collider, FixedJointBuilder, GenericJointBuilder, JointAxis, RapierMultibodyJointHandle, RevoluteJointBuilder, RigidBody, Rot, Sleeping, Vect};
 use bevy_rapier3d::render::{DebugRenderMode, RapierDebugRenderPlugin};
 use std::ops::Mul;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::dynamics::{JointAxesMask, MultibodyJoint};
 use bevy_rapier3d::na::{UnitQuaternion, Matrix3, Rotation3, UnitVector3, Vector, Vector3};
+use crate::ik::JacobianIKArmBundle;
 use crate::ik_systems::set_ik_arm_positions;
 
 fn main() {
@@ -33,7 +35,8 @@ fn main() {
         WorldInspectorPlugin::default()
     ))
         .add_systems(Startup, test_startup)
-        .add_systems(Update, test_update)
+        // .add_systems(Update, test_update)
+        // .add_systems(Startup, test_startup2)
         .add_systems(PostUpdate, set_ik_arm_positions)
         ;
 
@@ -44,7 +47,7 @@ fn main() {
     app.run();
 }
 
-fn test_startup (
+fn test_startup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -56,7 +59,8 @@ fn test_startup (
                 .looking_at(Vec3::NEG_Z, Vec3::Y),
             ..default()
         },
-        FlyCam
+        FlyCam,
+        Collider::ball(0.1)
     ));
 
     //spawn ground
@@ -88,7 +92,7 @@ fn test_startup (
 
     let material = materials.add(Color::rgb(1., 0., 0.));
     let torso_cmd = commands.spawn((
-        RigidBody::Dynamic,
+        RigidBody::Fixed,
         PbrBundle {
             mesh: torso_mesh,
             material,
@@ -158,23 +162,121 @@ fn test_update(
         let fwd = UnitVector3::new_normalize(cam_pos - joint_pos);
         let rot = UnitQuaternion::face_towards(&fwd, &Vector::y());
         let par_rot = link.local_to_world().rotation * link.local_to_parent().rotation.inverse();
-        joint_cmp.data.set_local_basis1((par_rot.inverse() * rot).into());
-
-        gizmos.ray(
-            joint_pos.into(),
-            joint_cmp.data.local_basis1().mul_vec3(Vec3::X),
-            Color::RED
-        );
-        gizmos.ray(
-            joint_pos.into(),
-            joint_cmp.data.local_basis1().mul_vec3(Vec3::Y),
-            Color::GREEN
-        );
-        gizmos.ray(
-            joint_pos.into(),
-            joint_cmp.data.local_basis1().mul_vec3(Vec3::Z),
-            Color::CYAN
-        );
-
+        joint_cmp.data.set_local_basis1(par_rot.inverse().into());
+        joint_cmp.data.set_local_basis2(par_rot.inverse().into());
+        let (x, y, z) = rot.euler_angles();
+        let mut stiff = 0.;
+        let mut damp = 0.;
+        if let Some(x_m) = joint_cmp.data.motor(JointAxis::AngX) {
+            stiff = x_m.stiffness;
+            damp = x_m.damping;
+        }
+        joint_cmp.data.set_motor_position(JointAxis::AngX, x - FRAC_PI_2, stiff, damp);
+        if let Some(y_m) = joint_cmp.data.motor(JointAxis::AngY) {
+            stiff = y_m.stiffness;
+            damp = y_m.damping;
+        }
+        joint_cmp.data.set_motor_position(JointAxis::AngY, y, stiff, damp);
+        if let Some(z_m) = joint_cmp.data.motor(JointAxis::AngZ) {
+            stiff = z_m.stiffness;
+            damp = z_m.damping;
+        }
+        joint_cmp.data.set_motor_position(JointAxis::AngZ, z, stiff, damp);
     }
+}
+
+
+fn test_update2(
+    mut commands: Commands,
+    rapier_context: Res<RapierContext>,
+    mut joint_q: Query<(&RapierMultibodyJointHandle, &mut MultibodyJoint)>,
+) {
+    let multibodies= &rapier_context.multibody_joints;
+
+    for (mb_handle, mut joint_cmp) in joint_q.iter_mut() {
+        let mb = multibodies.get(mb_handle.0).unwrap();
+        if mb.0.num_links() == 0 { continue; }
+        let mut link = mb.0.link(0).unwrap();
+        let mut found_link = false;
+        for l in mb.0.links() {
+            if l.joint.data.as_spherical().is_some() {
+                link = l;
+                found_link = true;
+                break;
+            }
+        }
+        if !found_link { continue; }
+
+        let pos = link.local_to_world().translation.vector;
+        let rapier_joint = &link.joint.data;
+        let joint_pos = link.local_to_world().rotation.mul(rapier_joint.local_frame2.translation.vector) + pos;
+
+        let par_rot = link.local_to_world().rotation * link.local_to_parent().rotation.inverse();
+        joint_cmp.data.set_local_basis1(par_rot.inverse().into());
+    }
+}
+
+fn test_startup2(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    //camera
+    commands.spawn((
+        Camera3dBundle {
+            transform: Transform::from_xyz(0., 0., 5.)
+                .looking_at(Vec3::NEG_Z, Vec3::Y),
+            ..default()
+        },
+        FlyCam,
+        Collider::ball(0.1)
+    ));
+
+    //spawn ground
+    commands.spawn((
+        RigidBody::Fixed,
+        Collider::cuboid(10., 0.1, 10.),
+        PbrBundle {
+            mesh: meshes.add(bevy::prelude::Cuboid {
+                half_size: Vec3::new(10., 0.1, 10.),
+            }),
+            material: materials.add(Color::rgb(0.95, 0.95, 0.95)),
+            transform: Transform::from_xyz(0., -1., 0.),
+            ..default()
+        },
+    ));
+
+    let root = commands.spawn((
+        RigidBody::Fixed,
+        PbrBundle {
+            mesh: meshes.add(Sphere::new(0.1).mesh()),
+            material: materials.add(Color::BLUE),
+            ..default()
+        }
+    )).id();
+    let rx = commands.spawn((
+        RigidBody::Dynamic,
+        MultibodyJoint::new(root, RevoluteJointBuilder::new(Vec3::X))
+    )).id();
+    let ry = commands.spawn((
+        RigidBody::Dynamic,
+        MultibodyJoint::new(rx, RevoluteJointBuilder::new(Vec3::Y))
+    )).id();
+    let rz = commands.spawn((
+        RigidBody::Dynamic,
+        MultibodyJoint::new(ry, RevoluteJointBuilder::new(Vec3::Z))
+    )).id();
+
+    let radius = 0.05;
+
+    let segment_shape = Capsule3d {
+        half_length: 0.3 - radius,
+        radius,
+    };
+    let segment = commands.spawn((
+        RigidBody::Dynamic,
+        MultibodyJoint::new(rz, FixedJointBuilder::new()
+            .local_anchor2(vec3_y(-segment_shape.half_length-radius))),
+        Collider::capsule_y(segment_shape.half_length, radius),
+    ));
 }
