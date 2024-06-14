@@ -2,7 +2,7 @@ use bevy::prelude::{App, Bundle, Component, Entity, Last, Plugin};
 use bevy::utils::default;
 use bevy_rapier3d::na::Vector3;
 use k::{Chain, connect, Error, InverseKinematicsSolver, Isometry3, JacobianIkSolver, JointType, NodeBuilder, RealField, SerialChain, SubsetOf};
-use crate::arm::{ArmInfo, BodySegment, CapsuleSegment};
+use crate::arm::{ArmChain, ArmInfo, BodySegment, CapsuleSegment, EntityChain};
 use crate::ik_systems::set_ik_arm_positions;
 
 
@@ -91,7 +91,7 @@ where
 
 #[derive(Bundle)]
 pub struct JacobianIKArmBundle<T: RealField> {
-    pub arm_info: ArmInfo,
+    pub entity_chain: EntityChain,
     pub ik_arm: JacobianIKArm<T>,
 }
 
@@ -99,13 +99,9 @@ impl<T> JacobianIKArmBundle<T>
 where 
     T: RealField + SubsetOf<f64>
 {
-    pub fn new(upper_arm: Entity, lower_arm: Entity, torso: Entity, elbow_ik_pole: Entity) -> Self {
+    pub fn new(arm_chain: ArmChain, elbow_ik_pole: Entity) -> Self {
         Self {
-            arm_info: ArmInfo {
-                upper_arm,
-                lower_arm,
-                torso,
-            },
+            entity_chain: arm_chain.into(),
             ik_arm: JacobianIKArm {
                 elbow_ik_pole: Some(elbow_ik_pole),
                 ..default()
@@ -120,7 +116,7 @@ where
 {
     fn default() -> Self {
         Self {
-            arm_info: default(),
+            entity_chain: default(),
             ik_arm: default(),
         }
     }
