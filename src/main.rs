@@ -8,7 +8,7 @@ use crate::math_utils::{get_rot_axes, rotation_from_fwd, vec3_y};
 use bevy::prelude::*;
 use bevy_flycam::{FlyCam, NoCameraPlayerPlugin};
 use bevy_rapier3d::plugin::{RapierContext, RapierPhysicsPlugin};
-use bevy_rapier3d::prelude::{Collider, FixedJointBuilder, GenericJointBuilder, JointAxis, RapierMultibodyJointHandle, RevoluteJointBuilder, RigidBody, Rot, Sleeping, Vect};
+use bevy_rapier3d::prelude::{Collider, FixedJointBuilder, GenericJoint, GenericJointBuilder, ImpulseJoint, JointAxis, RapierMultibodyJointHandle, RevoluteJointBuilder, RigidBody, Rot, Sleeping, Vect};
 use bevy_rapier3d::render::{DebugRenderMode, RapierDebugRenderPlugin};
 use std::ops::Mul;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
@@ -34,9 +34,9 @@ fn main() {
         },
         WorldInspectorPlugin::default()
     ))
-        .add_systems(Startup, test_startup)
+        // .add_systems(Startup, test_startup)
         // .add_systems(Update, test_update)
-        // .add_systems(Startup, test_startup2)
+        .add_systems(Startup, test_startup2)
         .add_systems(PostUpdate, set_ik_arm_positions)
         ;
 
@@ -241,30 +241,32 @@ fn test_startup2(
                 half_size: Vec3::new(10., 0.1, 10.),
             }),
             material: materials.add(Color::rgb(0.95, 0.95, 0.95)),
-            transform: Transform::from_xyz(0., -1., 0.),
+            transform: Transform::from_xyz(0., -5., 0.),
             ..default()
         },
     ));
 
+    let node_mesh = meshes.add(Sphere::new(0.05).mesh());
+
     let root = commands.spawn((
         RigidBody::Fixed,
         PbrBundle {
-            mesh: meshes.add(Sphere::new(0.1).mesh()),
+            mesh: node_mesh.clone(),
             material: materials.add(Color::BLUE),
             ..default()
         }
     )).id();
-    let rx = commands.spawn((
+    let shoulder_x = commands.spawn((
         RigidBody::Dynamic,
         MultibodyJoint::new(root, RevoluteJointBuilder::new(Vec3::X))
     )).id();
-    let ry = commands.spawn((
+    let shoulder_y = commands.spawn((
         RigidBody::Dynamic,
-        MultibodyJoint::new(rx, RevoluteJointBuilder::new(Vec3::Y))
+        MultibodyJoint::new(shoulder_x, RevoluteJointBuilder::new(Vec3::Y))
     )).id();
-    let rz = commands.spawn((
+    let shoulder_z = commands.spawn((
         RigidBody::Dynamic,
-        MultibodyJoint::new(ry, RevoluteJointBuilder::new(Vec3::Z))
+        MultibodyJoint::new(shoulder_y, RevoluteJointBuilder::new(Vec3::Z))
     )).id();
 
     let radius = 0.05;
@@ -273,10 +275,44 @@ fn test_startup2(
         half_length: 0.3 - radius,
         radius,
     };
-    let segment = commands.spawn((
+    let upper_arm = commands.spawn((
         RigidBody::Dynamic,
-        MultibodyJoint::new(rz, FixedJointBuilder::new()
-            .local_anchor2(vec3_y(-segment_shape.half_length-radius))),
+        MultibodyJoint::new(shoulder_z, FixedJointBuilder::new()
+            .local_anchor2(vec3_y(segment_shape.half_length+radius))),
         Collider::capsule_y(segment_shape.half_length, radius),
-    ));
+    )).id();
+
+    let imp_j = commands.spawn((
+        RigidBody::Dynamic,
+        ImpulseJoint::new(upper_arm, FixedJointBuilder::new()
+            .local_anchor1(vec3_y(-segment_shape.half_length-radius))),
+    )).id();
+
+
+    let elb_node_mat = materials.add(Color::GREEN);
+    let elb_x = commands.spawn((
+        RigidBody::Dynamic,
+        MultibodyJoint::new(imp_j, RevoluteJointBuilder::new(Vec3::Y)),
+        PbrBundle {
+            mesh: node_mesh.clone(),
+            material: elb_node_mat.clone(),
+            ..default()
+        },
+    )).id();
+    let elb_z = commands.spawn((
+        RigidBody::Dynamic,
+        MultibodyJoint::new(elb_x, RevoluteJointBuilder::new(Vec3::X)),
+        PbrBundle {
+            mesh: node_mesh.clone(),
+            material: elb_node_mat.clone(),
+            ..default()
+        },
+    )).id();
+
+    let lower_arm = commands.spawn((
+        RigidBody::Dynamic,
+        MultibodyJoint::new(elb_z, FixedJointBuilder::new()
+            .local_anchor2(vec3_y(segment_shape.half_length+radius))),
+        Collider::capsule_y(segment_shape.half_length, radius),
+    )).id();
 }
