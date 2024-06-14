@@ -99,11 +99,11 @@ impl<T> JacobianIKArmBundle<T>
 where 
     T: RealField + SubsetOf<f64>
 {
-    pub fn new(arm_chain: ArmChain, elbow_ik_pole: Entity) -> Self {
+    pub fn new(arm_chain: ArmChain, elbow_ik_pole: Option<Entity>) -> Self {
         Self {
             entity_chain: arm_chain.into(),
             ik_arm: JacobianIKArm {
-                elbow_ik_pole: Some(elbow_ik_pole),
+                elbow_ik_pole,
                 ..default()
             },
         }

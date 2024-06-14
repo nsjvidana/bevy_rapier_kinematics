@@ -5,15 +5,17 @@ mod arm;
 
 use std::f32::consts::{FRAC_2_PI, FRAC_PI_2};
 use crate::math_utils::{get_rot_axes, rotation_from_fwd, vec3_y};
-use bevy::prelude::*;
 use bevy_flycam::{FlyCam, NoCameraPlayerPlugin};
 use bevy_rapier3d::plugin::{RapierContext, RapierPhysicsPlugin};
-use bevy_rapier3d::prelude::{Collider, FixedJointBuilder, GenericJoint, GenericJointBuilder, ImpulseJoint, JointAxis, RapierMultibodyJointHandle, RevoluteJointBuilder, RigidBody, Rot, Sleeping, Vect};
+use bevy_rapier3d::prelude::{Collider, FixedJointBuilder, GenericJoint, GenericJointBuilder, ImpulseJoint, JointAxis, RapierMultibodyJointHandle, Real, RevoluteJointBuilder, RigidBody, Rot, Sleeping, Vect};
 use bevy_rapier3d::render::{DebugRenderMode, RapierDebugRenderPlugin};
 use std::ops::{Deref, Mul};
+use bevy::DefaultPlugins;
+use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::dynamics::{JointAxesMask, MultibodyJoint};
 use bevy_rapier3d::na::{UnitQuaternion, Matrix3, Rotation3, UnitVector3, Vector, Vector3};
+use crate::arm::ArmChain;
 use crate::ik::JacobianIKArmBundle;
 use crate::ik_systems::set_ik_arm_positions;
 
@@ -321,4 +323,15 @@ fn test_startup2(
         ),
         Collider::capsule_y(segment_shape.half_length, radius),
     )).id();
+
+    let arm = commands.spawn(JacobianIKArmBundle::<Real>::new(
+        ArmChain::new_attached(
+            root,
+            [shoulder_x, shoulder_y, shoulder_z],
+            upper_arm,
+            [elb_x, elb_z],
+            lower_arm
+        ),
+        None
+    ));
 }
