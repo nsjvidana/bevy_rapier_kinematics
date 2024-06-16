@@ -2,8 +2,8 @@ use bevy::prelude::{App, Bundle, Component, Entity, Last, Plugin};
 use bevy::utils::default;
 use bevy_rapier3d::na::Vector3;
 use k::{Chain, connect, Error, InverseKinematicsSolver, Isometry3, JacobianIkSolver, JointType, NodeBuilder, RealField, SerialChain, SubsetOf};
-use crate::arm::{ArmChain, ArmInfo, BodySegment, CapsuleSegment, EntityChain};
-use crate::ik_systems::set_ik_arm_positions;
+use crate::arm::{AttachedArmChain, ArmInfo, BodySegment, CapsuleSegment, EntityChain};
+use crate::ik_systems::prepare_ik_nodes;
 
 
 pub struct IKPlugin;
@@ -14,7 +14,7 @@ impl Plugin for IKPlugin {
 
         app
             .register_component_as::<dyn BodySegment, CapsuleSegment>()
-            .add_systems(Last, set_ik_arm_positions);
+            .add_systems(Last, prepare_ik_nodes);
     }
 }
 
@@ -47,38 +47,45 @@ where
             .finalize()
             .into();
         let l0: k::Node<T> = NodeBuilder::new()
-            .name("shoulder_x_rot")
+            .name("shld_x")
             .joint_type(JointType::Rotational {
                 axis: k::Vector3::x_axis()
             })
             .finalize()
             .into();
         let l1: k::Node<T> = NodeBuilder::new()
-            .name("shoulder_y_rot")
+            .name("shld_y")
             .joint_type(JointType::Rotational {
                 axis: k::Vector3::y_axis()
             })
             .finalize()
             .into();
         let l2: k::Node<T> = NodeBuilder::new()
-            .name("shoulder_z_rot")
+            .name("shld_z")
             .joint_type(JointType::Rotational {
                 axis: k::Vector3::z_axis()
             })
             .finalize()
             .into();
         let l3: k::Node<T> = NodeBuilder::new()
-            .name("elbow_y_rot")
+            .name("elb_y")
             .joint_type(JointType::Rotational {
                 axis: k::Vector3::y_axis()
             })
             .finalize()
             .into();
         let l4: k::Node<T> = NodeBuilder::new()
+            .name("elb_x")
+            .joint_type(JointType::Rotational {
+                axis: k::Vector3::y_axis()
+            })
+            .finalize()
+            .into();
+        let l5: k::Node<T> = NodeBuilder::new()
             .name("wrist")
             .finalize()
             .into();
-        connect![fixed => l0 => l1 => l2 => l3 => l4];
+        connect![fixed => l0 => l1 => l2 => l3 => l4 => l5];
 
         Self {
             chain: SerialChain::new_unchecked(k::Chain::from_root(fixed)),
@@ -99,7 +106,7 @@ impl<T> JacobianIKArmBundle<T>
 where 
     T: RealField + SubsetOf<f64>
 {
-    pub fn new(arm_chain: ArmChain, elbow_ik_pole: Option<Entity>) -> Self {
+    pub fn new(arm_chain: AttachedArmChain, elbow_ik_pole: Option<Entity>) -> Self {
         Self {
             entity_chain: arm_chain.into(),
             ik_arm: JacobianIKArm {
