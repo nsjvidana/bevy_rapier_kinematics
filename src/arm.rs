@@ -8,6 +8,17 @@ pub struct EntityChain {
     parts: Vec<Entity>
 }
 
+impl EntityChain {
+    pub fn as_attached_arm(&self) -> Option<&AttachedArmChain> {
+        if self.joints.len() == 5 && self.parts.len() == 3 {
+            Some(unsafe { std::mem::transmute(self) })
+        }
+        else {
+            None
+        }
+    }
+}
+
 impl Default for EntityChain {
     fn default() -> Self {
         Self {
@@ -17,14 +28,13 @@ impl Default for EntityChain {
     }
 }
 
-pub struct ArmChain {
+pub struct AttachedArmChain {
     raw: EntityChain,
-    is_attached: bool
 }
 
-impl ArmChain {
+impl AttachedArmChain {
     #[inline]
-    pub fn new_attached(
+    pub fn new(
         torso: Entity,
         shoulder_joints: [Entity; 3],
         upper_arm: Entity,
@@ -44,7 +54,6 @@ impl ArmChain {
         };
         Self {
             raw,
-            is_attached: true
         }
     }
 
@@ -57,39 +66,19 @@ impl ArmChain {
     }
 
     pub fn upper_arm(&self) -> Entity {
-        if self.is_attached { return self.raw.parts[1] }
-        return self.raw.parts[0]
+        self.raw.parts[1]
     }
 
     pub fn lower_arm(&self) -> Entity {
-        if self.is_attached { return self.raw.parts[2] }
-        return self.raw.parts[1]
+        self.raw.parts[2]
     }
 
     pub fn torso(&self) -> Option<Entity> {
-        if self.is_attached { return Some(self.raw.parts[0]) }
-        return None
-    }
-
-    pub fn is_attached(&self) -> bool {
-        self.is_attached
+        Some(self.raw.parts[0])
     }
 }
 
-impl From<EntityChain> for ArmChain {
-    fn from(value: EntityChain) -> Self {
-        if value.joints.len() != 5 || value.parts.len() < 2 || value.parts.len() > 3 {
-            panic!("This EntityChain is not an ArmChain!")
-        }
-
-        Self {
-            is_attached: value.parts.len() == 3,
-            raw: value,
-        }
-    }
-}
-
-impl Into<EntityChain> for ArmChain {
+impl Into<EntityChain> for AttachedArmChain {
     fn into(self) -> EntityChain {
         self.raw
     }
