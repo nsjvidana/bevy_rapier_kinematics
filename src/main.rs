@@ -15,9 +15,9 @@ use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::dynamics::{JointAxesMask, MultibodyJoint};
 use bevy_rapier3d::na::{UnitQuaternion, Matrix3, Rotation3, UnitVector3, Vector, Vector3};
-use crate::arm::ArmChain;
+use crate::arm::AttachedArmChain;
 use crate::ik::JacobianIKArmBundle;
-use crate::ik_systems::set_ik_arm_positions;
+use crate::ik_systems::prepare_ik_nodes;
 
 fn main() {
     let mut app = App::new();
@@ -39,7 +39,7 @@ fn main() {
         // .add_systems(Startup, test_startup)
         // .add_systems(Update, test_update)
         .add_systems(Startup, test_startup2)
-        .add_systems(PostUpdate, set_ik_arm_positions)
+        .add_systems(PostUpdate, prepare_ik_nodes)
         ;
 
     let mut movement_settings = app.world.get_resource_mut::<bevy_flycam::MovementSettings>().unwrap();
@@ -260,14 +260,17 @@ fn test_startup2(
     )).id();
     let shoulder_x = commands.spawn((
         RigidBody::Dynamic,
+        Transform::default(),
         MultibodyJoint::new(root, RevoluteJointBuilder::new(Vec3::X))
     )).id();
     let shoulder_y = commands.spawn((
         RigidBody::Dynamic,
+        Transform::default(),
         MultibodyJoint::new(shoulder_x, RevoluteJointBuilder::new(Vec3::Y))
     )).id();
     let shoulder_z = commands.spawn((
         RigidBody::Dynamic,
+        Transform::default(),
         MultibodyJoint::new(shoulder_y, RevoluteJointBuilder::new(Vec3::Z))
     )).id();
 
@@ -295,7 +298,7 @@ fn test_startup2(
 
 
     let elb_node_mat = materials.add(Color::GREEN);
-    let elb_x = commands.spawn((
+    let elb_y = commands.spawn((
         RigidBody::Dynamic,
         MultibodyJoint::new(imp_j, RevoluteJointBuilder::new(Vec3::Y)),
         PbrBundle {
@@ -304,9 +307,9 @@ fn test_startup2(
             ..default()
         },
     )).id();
-    let elb_z = commands.spawn((
+    let elb_x = commands.spawn((
         RigidBody::Dynamic,
-        MultibodyJoint::new(elb_x, RevoluteJointBuilder::new(Vec3::X)),
+        MultibodyJoint::new(elb_y, RevoluteJointBuilder::new(Vec3::X)),
         PbrBundle {
             mesh: node_mesh.clone(),
             material: elb_node_mat.clone(),
@@ -316,7 +319,7 @@ fn test_startup2(
 
     let lower_arm = commands.spawn((
         RigidBody::Dynamic,
-        MultibodyJoint::new(elb_z, *FixedJointBuilder::new()
+        MultibodyJoint::new(elb_x, *FixedJointBuilder::new()
             .local_anchor2(vec3_y(segment_shape.half_length+radius))
             .build()
             .set_contacts_enabled(false)
@@ -325,11 +328,11 @@ fn test_startup2(
     )).id();
 
     let arm = commands.spawn(JacobianIKArmBundle::<Real>::new(
-        ArmChain::new_attached(
+        AttachedArmChain::new(
             root,
             [shoulder_x, shoulder_y, shoulder_z],
             upper_arm,
-            [elb_x, elb_z],
+            [elb_x, elb_y],
             lower_arm
         ),
         None
