@@ -10,7 +10,7 @@ pub struct EntityChain {
 
 impl EntityChain {
     pub fn as_attached_arm(&self) -> Option<&AttachedArmChain> {
-        if self.joints.len() == 5 && self.parts.len() == 3 {
+        if self.joints.len() == 5 && self.parts.len() == 4 {
             Some(unsafe { std::mem::transmute(self) })
         }
         else {
@@ -39,7 +39,8 @@ impl AttachedArmChain {
         shoulder_joints: [Entity; 3],
         upper_arm: Entity,
         elbow_joints: [Entity; 2],
-        lower_arm: Entity
+        lower_arm: Entity,
+        wrist: Entity
     ) -> Self {
         let raw = EntityChain {
             joints: vec![
@@ -50,6 +51,7 @@ impl AttachedArmChain {
                 torso,
                 upper_arm,
                 lower_arm,
+                wrist
             ],
         };
         Self {
@@ -71,6 +73,10 @@ impl AttachedArmChain {
 
     pub fn lower_arm(&self) -> Entity {
         self.raw.parts[2]
+    }
+    
+    pub fn wrist(&self) -> Entity {
+        self.raw.parts[3]
     }
 
     pub fn torso(&self) -> Option<Entity> {
