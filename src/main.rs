@@ -6,7 +6,7 @@ mod physics;
 
 use bevy_flycam::{FlyCam, NoCameraPlayerPlugin};
 use bevy_rapier3d::plugin::{RapierContext, RapierPhysicsPlugin};
-use bevy_rapier3d::prelude::{Collider, FixedJointBuilder, ImpulseJoint, MultibodyJoint, PhysicsSet, Real, RevoluteJointBuilder, RigidBody, Sleeping, SphericalJointBuilder, Vect};
+use bevy_rapier3d::prelude::{Collider, FixedJointBuilder, ImpulseJoint, MultibodyJoint, PhysicsSet, RapierMultibodyJointHandle, Real, RevoluteJointBuilder, RigidBody, Sleeping, SphericalJointBuilder, Vect};
 use bevy_rapier3d::render::{DebugRenderMode, RapierDebugRenderPlugin};
 use std::ops::{Deref, Mul};
 use bevy::DefaultPlugins;
@@ -151,6 +151,7 @@ pub fn update(
 
     keys: Res<ButtonInput<KeyCode>>,
     mut sleeping_res: ResMut<TestResource>,
+    rapier_context: Res<RapierContext>,
 ) {
     let r1 = cam_q.get_single();
     let r2 = arm_q.get_single();
@@ -158,11 +159,11 @@ pub fn update(
 
     let cam_pos = r1.unwrap().translation;
     let [
-    fixed,
-    shoulder,
-    elbow_z,
-    wrist_x,
-    wrist_y,
+        fixed,
+        shoulder,
+        elbow_z,
+        wrist_x,
+        wrist_y,
     ] = r2.unwrap().entities;
 
     //sleeping control
@@ -190,17 +191,47 @@ pub fn update(
     //     wrist: {wrist_pos}"
     // );
 
+    let shoulder_handle = rapier_context.entity2multibody_joint().get(&shoulder).unwrap();
+    let elbow_handle = rapier_context.entity2multibody_joint().get(&elbow_z).unwrap();
+    let wrist_x_handle = rapier_context.entity2multibody_joint().get(&wrist_x).unwrap();
+    let wrist_y_handle = rapier_context.entity2multibody_joint().get(&wrist_y).unwrap();
+
+    let (mb, link_id) = rapier_context.multibody_joints.get(*shoulder_handle).unwrap();
+    let shld_relative = mb.link(link_id).unwrap().joint.body_to_parent();
+
+    let (mb, link_id) = rapier_context.multibody_joints.get(*elbow_handle).unwrap();
+    let elb_relative = mb.link(link_id).unwrap().joint.body_to_parent();
+    
+    let (mb, link_id) = rapier_context.multibody_joints.get(*wrist_x_handle).unwrap();
+    let wrist_x_relative = mb.link(link_id).unwrap().joint.body_to_parent();
+    let (mb, link_id) = rapier_context.multibody_joints.get(*wrist_y_handle).unwrap();
+    let wrist_y_relative = mb.link(link_id).unwrap().joint.body_to_parent();
+    
+
+
     //shoulder nodes
-    nodes[1].set_origin(k::Isometry3::translation(shld_pos.x, shld_pos.y, shld_pos.z));
-    nodes[2].set_origin(k::Isometry3::translation(shld_pos.x, shld_pos.y, shld_pos.z));
-    nodes[3].set_origin(k::Isometry3::translation(shld_pos.x, shld_pos.y, shld_pos.z));
+    let shld_trans = k::Isometry3::from_parts(
+        k::Translation3::new(shld_pos.x, shld_pos.y, shld_pos.z),
+        unsafe { std::mem::transmute(shld_relative.rotation) }
+    );
+    nodes[1].set_origin(shld_trans);
+    nodes[2].set_origin(shld_trans);
+    nodes[3].set_origin(shld_trans);
 
     //elbow node
-    nodes[4].set_origin(k::Isometry3::translation(elb_pos.x, elb_pos.y, elb_pos.z));
+    let elb_trans = k::Isometry3::from_parts(
+        k::Translation3::new(elb_pos.x, elb_pos.y, elb_pos.z),
+        unsafe { std::mem::transmute(elb_relative.rotation) }
+    );
+    nodes[4].set_origin(elb_trans);
 
     //wrist node
-    nodes[5].set_origin(k::Isometry3::translation(wrist_pos.x, wrist_pos.y, wrist_pos.z));
-    nodes[6].set_origin(k::Isometry3::translation(wrist_pos.x, wrist_pos.y, wrist_pos.z));
+    let wrist_trans = k::Isometry3::from_parts(
+        k::Translation3::new(wrist_pos.x, wrist_pos.y, wrist_pos.z),
+        unsafe { std::mem::transmute(wrist_x_relative.rotation * wrist_y_relative.rotation) }
+    );
+    nodes[5].set_origin(wrist_trans);
+    nodes[6].set_origin(wrist_trans);
 
     let solver = k::JacobianIkSolver::new(
         0.1, 10_f32.to_radians(), 0.5, 10
@@ -209,12 +240,15 @@ pub fn update(
     use std::time::Instant;
     let start = Instant::now();
     let solver_result = solver.solve(&chain, &k::Isometry3::translation(cam_pos.x, cam_pos.y, cam_pos.z));
+    let elapsed = start.elapsed();
     if solver_result.is_err() {
-        // println!("{}", solver_result.err().unwrap());
+        if keys.pressed(KeyCode::KeyE) {
+            println!("{}", solver_result.err().unwrap());
+        }
+        return;
     }
-    else {
-        println!("Converged! Time to solve: {:.2?}", start.elapsed());
-    }
+    
+    println!("Converged! Time to solve: {:.2?}", elapsed);
 }
 
 #[derive(Component)]
