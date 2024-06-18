@@ -161,8 +161,10 @@ pub fn update(
     keys: Res<ButtonInput<KeyCode>>,
     mut sleeping_res: ResMut<TestResource>,
     rapier_context: Res<RapierContext>,
+
+    mut gizmos: Gizmos
 ) {
-    if !keys.just_pressed(KeyCode::KeyP) { return; }
+    if !keys.pressed(KeyCode::KeyP) { return; }
 
     let r1 = cam_q.get_single();
     let r2 = arm_q.get_single();
@@ -245,6 +247,16 @@ pub fn update(
     println!("Converged! Time to solve: {:.2?}", elapsed);
     
     chain.update_transforms();
+
+    let shld_pos = nodes[3].world_transform().unwrap().translation;
+    let elb_pos = nodes[4].world_transform().unwrap().translation;
+    let wrist_pos = nodes[6].world_transform().unwrap().translation;
+
+    gizmos.sphere(Vec3::new(shld_pos.x, shld_pos.y, shld_pos.z), Quat::IDENTITY, 0.05, Color::RED);
+    gizmos.sphere(Vec3::new(elb_pos.x, elb_pos.y, elb_pos.z), Quat::IDENTITY, 0.05, Color::GREEN);
+    gizmos.sphere(Vec3::new(wrist_pos.x, wrist_pos.y, wrist_pos.z), Quat::IDENTITY, 0.05, Color::BLUE);
+
+    return;
     
     //shoulder
     let mut shld_joint = joint_q.get_mut(shoulder).unwrap();
