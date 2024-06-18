@@ -5,11 +5,10 @@ mod arm;
 mod physics;
 
 use bevy_flycam::{FlyCam, NoCameraPlayerPlugin};
+use bevy_rapier3d::dynamics::JointAxis;
 use bevy_rapier3d::plugin::{RapierContext, RapierPhysicsPlugin};
-use bevy_rapier3d::prelude::{Collider, FixedJointBuilder, ImpulseJoint, MultibodyJoint, PhysicsSet, RapierMultibodyJointHandle, Real, RevoluteJointBuilder, RigidBody, Sleeping, SphericalJointBuilder, Vect};
+use bevy_rapier3d::prelude::{Collider, FixedJointBuilder, ImpulseJoint, MultibodyJoint, PhysicsSet, Real, RevoluteJointBuilder, RigidBody, Sleeping, SphericalJointBuilder, Vect};
 use bevy_rapier3d::render::{DebugRenderMode, RapierDebugRenderPlugin};
-use std::ops::{Deref, Mul};
-use bevy::DefaultPlugins;
 use bevy::math::Vec3;
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
@@ -67,6 +66,8 @@ pub fn startup(
         Collider::ball(0.1)
     ));
 
+    let target_vel = 10_f32.to_radians();
+
     let fixed = commands.spawn((
         RigidBody::Fixed,
         Sleeping::default(),
@@ -77,7 +78,11 @@ pub fn startup(
         RigidBody::Dynamic,
         Sleeping::default(),
         Transform::default(),
-        MultibodyJoint::new(fixed, SphericalJointBuilder::new())
+        MultibodyJoint::new(fixed, SphericalJointBuilder::new()
+            .motor(JointAxis::AngX, 0., target_vel, 1., 0.05)
+            .motor(JointAxis::AngY, 0., target_vel, 1., 0.05)
+            .motor(JointAxis::AngZ, 0., target_vel, 1., 0.05)
+        )
     )).id();
 
     let radius = 0.05;
@@ -100,6 +105,7 @@ pub fn startup(
         Transform::default(),
         MultibodyJoint::new(upper_arm, RevoluteJointBuilder::new(Vect::Z)
             .local_anchor1(vec3_y(-segment_shape.half_length-radius))
+            .motor(0., target_vel, 1., 0.05)
         )
     )).id();
 
@@ -122,7 +128,9 @@ pub fn startup(
         Sleeping::default(),
         Transform::default(),
         MultibodyJoint::new(lower_arm, RevoluteJointBuilder::new(Vect::X)
-            .local_anchor1(vec3_y(-segment_shape.half_length-radius)))
+            .local_anchor1(vec3_y(-segment_shape.half_length-radius))
+            .motor(0., target_vel, 1., 0.05)
+        )
     )).id();
     let wrist_y = commands.spawn((
         RigidBody::Dynamic,
@@ -145,7 +153,8 @@ pub fn startup(
 
 pub fn update(
     arm_q: Query<&Arm>,
-    joint_q: Query<(&Transform, &MultibodyJoint)>,
+    joint_transforms_q: Query<&Transform, With<MultibodyJoint>>,
+    mut joint_q: Query<&mut MultibodyJoint>,
     cam_q: Query<&Transform, With<FlyCam>>,
     mut sleeping_q: Query<&mut Sleeping>,
 
@@ -153,6 +162,8 @@ pub fn update(
     mut sleeping_res: ResMut<TestResource>,
     rapier_context: Res<RapierContext>,
 ) {
+    if !keys.just_pressed(KeyCode::KeyP) { return; }
+
     let r1 = cam_q.get_single();
     let r2 = arm_q.get_single();
     if r1.is_err() || r2.is_err() { return; }
@@ -166,30 +177,13 @@ pub fn update(
         wrist_y,
     ] = r2.unwrap().entities;
 
-    //sleeping control
-    {
-        if keys.just_pressed(KeyCode::KeyK) {
-            sleeping_res.sleep = !sleeping_res.sleep;
-            sleeping_q.get_mut(fixed).unwrap().sleeping = sleeping_res.sleep;
-            sleeping_q.get_mut(shoulder).unwrap().sleeping = sleeping_res.sleep;
-            sleeping_q.get_mut(elbow_z).unwrap().sleeping = sleeping_res.sleep;
-            sleeping_q.get_mut(wrist_x).unwrap().sleeping = sleeping_res.sleep;
-            sleeping_q.get_mut(wrist_y).unwrap().sleeping = sleeping_res.sleep;
-        }
-    }
-
     let arm_root = create_arm();
     let chain = SerialChain::new_unchecked(k::Chain::from_root(arm_root));
     let nodes: Vec<&k::Node<Real>> = chain.iter().collect();
-    let shld_pos = joint_q.get(shoulder).unwrap().0.translation;
-    let elb_pos = joint_q.get(elbow_z).unwrap().0.translation;
-    let wrist_pos = joint_q.get(wrist_x).unwrap().0.translation;
 
-    // println!("\n
-    //     shoulder: {shld_pos}\n
-    //     elbow: {elb_pos}\n
-    //     wrist: {wrist_pos}"
-    // );
+    let shld_pos = joint_transforms_q.get(shoulder).unwrap().translation;
+    let elb_pos = joint_transforms_q.get(elbow_z).unwrap().translation;
+    let wrist_pos = joint_transforms_q.get(wrist_x).unwrap().translation;
 
     let shoulder_handle = rapier_context.entity2multibody_joint().get(&shoulder).unwrap();
     let elbow_handle = rapier_context.entity2multibody_joint().get(&elbow_z).unwrap();
@@ -249,6 +243,35 @@ pub fn update(
     }
     
     println!("Converged! Time to solve: {:.2?}", elapsed);
+    
+    chain.update_transforms();
+    
+    //shoulder
+    let mut shld_joint = joint_q.get_mut(shoulder).unwrap();
+    shld_joint.data.raw.motors[JointAxis::AngX as usize].target_pos = nodes[1]
+        .world_transform().unwrap().rotation.euler_angles().0;
+    shld_joint.data.raw.motors[JointAxis::AngY as usize].target_pos = nodes[2]
+        .world_transform().unwrap().rotation.euler_angles().1;
+    shld_joint.data.raw.motors[JointAxis::AngZ as usize].target_pos = nodes[3]
+        .world_transform().unwrap().rotation.euler_angles().2;
+
+    //elbow (z axis)
+    joint_q.get_mut(elbow_z).unwrap().data.raw.motors[JointAxis::AngZ as usize].target_pos = nodes[4]
+        .world_transform().unwrap().rotation.euler_angles().2;
+
+    //wrist
+    joint_q.get_mut(wrist_x).unwrap().data.raw.motors[JointAxis::AngX as usize].target_pos = nodes[5]
+        .world_transform().unwrap().rotation.euler_angles().0;
+    joint_q.get_mut(wrist_y).unwrap().data.raw.motors[JointAxis::AngY as usize].target_pos = nodes[6]
+        .world_transform().unwrap().rotation.euler_angles().1;
+    
+    //waking up the joints
+    sleeping_res.sleep = !sleeping_res.sleep;
+    sleeping_q.get_mut(fixed).unwrap().sleeping = false;
+    sleeping_q.get_mut(shoulder).unwrap().sleeping = false;
+    sleeping_q.get_mut(elbow_z).unwrap().sleeping = false;
+    sleeping_q.get_mut(wrist_x).unwrap().sleeping = false;
+    sleeping_q.get_mut(wrist_y).unwrap().sleeping = false;
 }
 
 #[derive(Component)]
@@ -270,7 +293,7 @@ fn create_arm() -> k::Node<Real> {
             axis: Vector3::x_axis(),
         })
         .finalize()
-        .into();
+        .into(); 
     let l1: k::Node<f32> = NodeBuilder::new()
         .name("shoulder_y")
         .joint_type(JointType::Rotational {
