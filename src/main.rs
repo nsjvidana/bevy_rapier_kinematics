@@ -13,6 +13,7 @@ use bevy::math::Vec3;
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use k::{connect, InverseKinematicsSolver, JointType, NodeBuilder, SerialChain};
+use shape::Cube;
 use crate::math_utils::vec3_y;
 use crate::physics::{toggle_contacts_with, ToggleContactsWith};
 
@@ -53,7 +54,9 @@ pub struct TestResource {
 }
 
 pub fn startup(
-    mut commands: Commands
+    mut commands: Commands,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
 ) {
     //camera
     commands.spawn((
@@ -66,6 +69,16 @@ pub fn startup(
         Collider::ball(0.1)
     ));
 
+    //testing entity
+    commands.spawn((
+        TestingEntity,
+        PbrBundle {
+            mesh: meshes.add(Cuboid::new(0.05, 0.05, 0.05).mesh()),
+            material: materials.add(Color::YELLOW),
+            ..default()
+        }
+    ));
+    
     let target_vel = 10_f32.to_radians();
 
     let fixed = commands.spawn((
@@ -123,29 +136,30 @@ pub fn startup(
     )).id();
 
 
-    let wrist_x = commands.spawn((
+    let wrist = commands.spawn((
         RigidBody::Dynamic,
         Sleeping::default(),
         Transform::default(),
-        MultibodyJoint::new(lower_arm, RevoluteJointBuilder::new(Vect::X)
+        MultibodyJoint::new(lower_arm, SphericalJointBuilder::new()
             .local_anchor1(vec3_y(-segment_shape.half_length-radius))
-            .motor(0., target_vel, 1., 0.05)
+            .motor(JointAxis::AngX, 0., target_vel, 1., 0.05)
+            .motor(JointAxis::AngY, 0., target_vel, 1., 0.05)
+            .motor(JointAxis::AngZ, 0., target_vel, 1., 0.05)
         )
     )).id();
-    let wrist_y = commands.spawn((
-        RigidBody::Dynamic,
-        Sleeping::default(),
-        Transform::default(),
-        MultibodyJoint::new(wrist_x, RevoluteJointBuilder::new(Vect::Y))
-    )).id();
+    // let wrist_y = commands.spawn((
+    //     RigidBody::Dynamic,
+    //     Sleeping::default(),
+    //     Transform::default(),
+    //     MultibodyJoint::new(wrist_x, RevoluteJointBuilder::new(Vect::Y))
+    // )).id();
 
     let arm = commands.spawn(Arm {
         entities: [
             fixed,
             shoulder,
             elb_z,
-            wrist_x,
-            wrist_y
+            wrist,
         ],
         chain: SerialChain::new_unchecked(k::Chain::from_root(create_arm()))
     });
@@ -155,28 +169,36 @@ pub fn update(
     arm_q: Query<&Arm>,
     joint_transforms_q: Query<&Transform, With<MultibodyJoint>>,
     mut joint_q: Query<&mut MultibodyJoint>,
-    cam_q: Query<&Transform, With<FlyCam>>,
     mut sleeping_q: Query<&mut Sleeping>,
+    mut testing_q: Query<&mut Transform, (With<TestingEntity>, Without<MultibodyJoint>)>,
 
     keys: Res<ButtonInput<KeyCode>>,
     mut sleeping_res: ResMut<TestResource>,
     rapier_context: Res<RapierContext>,
+    time: Res<bevy::prelude::Time>,
 
     mut gizmos: Gizmos
 ) {
-    if !keys.pressed(KeyCode::KeyP) { return; }
-
-    let r1 = cam_q.get_single();
+    let r1 = testing_q.get_single_mut();
     let r2 = arm_q.get_single();
     if r1.is_err() || r2.is_err() { return; }
 
-    let cam_pos = r1.unwrap().translation;
+    let mut targ_transform = r1.unwrap();
+    let left = keys.pressed(KeyCode::ArrowLeft) as i8 as f32;
+    let right = keys.pressed(KeyCode::ArrowRight) as i8 as f32;
+    let fwd = keys.pressed(KeyCode::ArrowUp) as i8 as f32;
+    let back = keys.pressed(KeyCode::ArrowDown) as i8 as f32;
+    let up = keys.pressed(KeyCode::Numpad8) as i8 as f32;
+    let down = keys.pressed(KeyCode::Numpad2) as i8 as f32;
+
+    targ_transform.translation += 0.2 * time.delta_seconds() * Vec3::new(left-right, up-down, fwd-back);
+
+    let targ_pos = targ_transform.translation;
     let [
         fixed,
         shoulder,
         elbow_z,
-        wrist_x,
-        wrist_y,
+        wrist,
     ] = r2.unwrap().entities;
 
     let arm_root = create_arm();
@@ -185,12 +207,13 @@ pub fn update(
 
     let shld_pos = joint_transforms_q.get(shoulder).unwrap().translation;
     let elb_pos = joint_transforms_q.get(elbow_z).unwrap().translation;
-    let wrist_pos = joint_transforms_q.get(wrist_x).unwrap().translation;
+    let wrist_pos = joint_transforms_q.get(wrist).unwrap().translation;
 
     let shoulder_handle = rapier_context.entity2multibody_joint().get(&shoulder).unwrap();
     let elbow_handle = rapier_context.entity2multibody_joint().get(&elbow_z).unwrap();
-    let wrist_x_handle = rapier_context.entity2multibody_joint().get(&wrist_x).unwrap();
-    let wrist_y_handle = rapier_context.entity2multibody_joint().get(&wrist_y).unwrap();
+    let wrist_handle = rapier_context.entity2multibody_joint().get(&wrist).unwrap();
+    // let wrist_x_handle = rapier_context.entity2multibody_joint().get(&wrist_x).unwrap();
+    // let wrist_y_handle = rapier_context.entity2multibody_joint().get(&wrist_y).unwrap();
 
     let (mb, link_id) = rapier_context.multibody_joints.get(*shoulder_handle).unwrap();
     let shld_relative = mb.link(link_id).unwrap().joint.body_to_parent();
@@ -198,21 +221,23 @@ pub fn update(
     let (mb, link_id) = rapier_context.multibody_joints.get(*elbow_handle).unwrap();
     let elb_relative = mb.link(link_id).unwrap().joint.body_to_parent();
     
-    let (mb, link_id) = rapier_context.multibody_joints.get(*wrist_x_handle).unwrap();
-    let wrist_x_relative = mb.link(link_id).unwrap().joint.body_to_parent();
-    let (mb, link_id) = rapier_context.multibody_joints.get(*wrist_y_handle).unwrap();
-    let wrist_y_relative = mb.link(link_id).unwrap().joint.body_to_parent();
+    let (mb, link_id) = rapier_context.multibody_joints.get(*wrist_handle).unwrap();
+    let wrist_relative = mb.link(link_id).unwrap().joint.body_to_parent();
     
 
 
     //shoulder nodes
-    let shld_trans = k::Isometry3::from_parts(
+    let (x, y, z) = shld_relative.rotation.to_rotation_matrix().euler_angles();
+    let mut shld_trans = k::Isometry3::from_parts(
         k::Translation3::new(shld_pos.x, shld_pos.y, shld_pos.z),
-        unsafe { std::mem::transmute(shld_relative.rotation) }
+        k::UnitQuaternion::identity()
     );
-    nodes[1].set_origin(shld_trans);
-    nodes[2].set_origin(shld_trans);
-    nodes[3].set_origin(shld_trans);
+    shld_trans.rotation = k::UnitQuaternion::from_euler_angles(x, 0., 0.);
+        nodes[1].set_origin(shld_trans);
+    shld_trans.rotation = k::UnitQuaternion::from_euler_angles(0., y, 0.);
+        nodes[2].set_origin(shld_trans);
+    shld_trans.rotation = k::UnitQuaternion::from_euler_angles(0., 0., z);
+        nodes[3].set_origin(shld_trans);
 
     //elbow node
     let elb_trans = k::Isometry3::from_parts(
@@ -222,12 +247,17 @@ pub fn update(
     nodes[4].set_origin(elb_trans);
 
     //wrist node
-    let wrist_trans = k::Isometry3::from_parts(
+    let (x, y, z) = wrist_relative.rotation.to_rotation_matrix().euler_angles();
+    let mut wrist_trans = k::Isometry3::from_parts(
         k::Translation3::new(wrist_pos.x, wrist_pos.y, wrist_pos.z),
-        unsafe { std::mem::transmute(wrist_x_relative.rotation * wrist_y_relative.rotation) }
+        k::UnitQuaternion::identity()
     );
-    nodes[5].set_origin(wrist_trans);
-    nodes[6].set_origin(wrist_trans);
+    wrist_trans.rotation = k::UnitQuaternion::from_euler_angles(x, 0., 0.);
+        nodes[5].set_origin(wrist_trans);
+    wrist_trans.rotation = k::UnitQuaternion::from_euler_angles(0., y, 0.);
+        nodes[6].set_origin(wrist_trans);
+    wrist_trans.rotation = k::UnitQuaternion::from_euler_angles(0., 0., z);
+        nodes[7].set_origin(wrist_trans);
 
     let solver = k::JacobianIkSolver::new(
         0.1, 10_f32.to_radians(), 0.5, 10
@@ -235,7 +265,7 @@ pub fn update(
 
     use std::time::Instant;
     let start = Instant::now();
-    let solver_result = solver.solve(&chain, &k::Isometry3::translation(cam_pos.x, cam_pos.y, cam_pos.z));
+    let solver_result = solver.solve(&chain, &k::Isometry3::translation(targ_pos.x, targ_pos.y, targ_pos.z));
     let elapsed = start.elapsed();
     if solver_result.is_err() {
         if keys.pressed(KeyCode::KeyE) {
@@ -272,24 +302,22 @@ pub fn update(
         .world_transform().unwrap().rotation.euler_angles().2;
 
     //wrist
-    joint_q.get_mut(wrist_x).unwrap().data.raw.motors[JointAxis::AngX as usize].target_pos = nodes[5]
+    let wrist_motors = &mut joint_q.get_mut(wrist).unwrap().data.raw.motors;
+    wrist_motors[JointAxis::AngX as usize].target_pos = nodes[5]
         .world_transform().unwrap().rotation.euler_angles().0;
-    joint_q.get_mut(wrist_y).unwrap().data.raw.motors[JointAxis::AngY as usize].target_pos = nodes[6]
+    wrist_motors[JointAxis::AngY as usize].target_pos = nodes[6]
         .world_transform().unwrap().rotation.euler_angles().1;
+    wrist_motors[JointAxis::AngZ as usize].target_pos = nodes[7]
+        .world_transform().unwrap().rotation.euler_angles().2;
     
     //waking up the joints
     sleeping_res.sleep = !sleeping_res.sleep;
     sleeping_q.get_mut(fixed).unwrap().sleeping = false;
     sleeping_q.get_mut(shoulder).unwrap().sleeping = false;
     sleeping_q.get_mut(elbow_z).unwrap().sleeping = false;
-    sleeping_q.get_mut(wrist_x).unwrap().sleeping = false;
-    sleeping_q.get_mut(wrist_y).unwrap().sleeping = false;
-}
-
-#[derive(Component)]
-pub struct Arm {
-    pub entities: [Entity; 5],
-    pub chain: SerialChain<Real>,
+    sleeping_q.get_mut(wrist).unwrap().sleeping = false;
+    // sleeping_q.get_mut(wrist_x).unwrap().sleeping = false;
+    // sleeping_q.get_mut(wrist_y).unwrap().sleeping = false;
 }
 
 fn create_arm() -> k::Node<Real> {
@@ -341,6 +369,22 @@ fn create_arm() -> k::Node<Real> {
         })
         .finalize()
         .into();
-    connect![fixed => l0 => l1 => l2 => l3 => l4 => l5];
+    let l6: k::Node<f32> = NodeBuilder::new()
+        .name("wrist_z")
+        .joint_type(JointType::Rotational {
+            axis: Vector3::z_axis(),
+        })
+        .finalize()
+        .into();
+    connect![fixed => l0 => l1 => l2 => l3 => l4 => l5 => l6];
     fixed
 }
+
+#[derive(Component)]
+pub struct Arm {
+    pub entities: [Entity; 4],
+    pub chain: SerialChain<Real>,
+}
+
+#[derive(Component)]
+pub struct TestingEntity;
