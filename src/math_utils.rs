@@ -1,10 +1,29 @@
 use std::f32::consts::PI;
 use bevy::math::*;
+use bevy_rapier3d::math::Real;
 use bevy_rapier3d::na::{Matrix3, UnitQuaternion, UnitVector3, Vector, Vector3, Rotation3};
-use bevy_rapier3d::parry::math::Real;
 use bevy_rapier3d::rapier::utils::SimdBasis;
 
 pub const FRAC_PI_12: f32 = PI/12.;
+
+pub trait Conversion<A, B> {
+    fn from(self, value: A) -> B;
+    fn into(self, value: B) -> A;
+}
+
+
+
+#[inline]
+pub fn project_onto_plane<T: k::RealField>(vector: &k::Vector3<T>, plane_normal: &k::nalgebra::UnitVector3<T>) -> k::Vector3<T> {
+    let normsq = plane_normal.norm_squared();
+    let dot = vector.dot(plane_normal);
+    let div = dot / normsq;
+    k::Vector3::<T>::new(
+        vector.x.clone() - plane_normal.x.clone() * div.clone(),
+        vector.y.clone() - plane_normal.y.clone() * div.clone(),
+        vector.z.clone() - plane_normal.z.clone() * div
+    )
+}
 
 /// Returns a rotation's right, up, and forward vectors from a given forward vector.
 /// The returned tuple is in the form: (right, up, fwd). Vectors are normalized.
