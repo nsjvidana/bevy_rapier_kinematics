@@ -6,6 +6,7 @@ mod physics;
 mod k_chain;
 mod testing;
 
+use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
 use bevy_rapier3d::plugin::RapierPhysicsPlugin;
 use bevy_rapier3d::prelude::{Collider, FixedJointBuilder, MultibodyJoint, RevoluteJointBuilder, RigidBody};
 use bevy_rapier3d::render::RapierDebugRenderPlugin;
@@ -21,6 +22,11 @@ fn main() {
     ))
         .add_systems(Startup, startup);
 
+    //flycam stuff
+    app.add_plugins(NoCameraPlayerPlugin);
+    app.world.resource_mut::<MovementSettings>()
+        .speed = 2.5;
+
     app.run();
 }
 
@@ -34,6 +40,7 @@ pub fn startup(
                 .looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         },
+        FlyCam,
         Collider::ball(0.1)
     ));
 
@@ -57,20 +64,37 @@ pub fn startup(
     let size = (half_height+radius) * 2.;
     let half_size = size/2.;
 
-    let shld_pitch = commands.spawn(mb_joint!(fixed, RevoluteJointBuilder::new(Vec3::X))).id();
-    let shld_roll = commands.spawn(mb_joint!(shld_pitch, RevoluteJointBuilder::new(Vec3::Y))).id();
-    let shld_yaw = commands.spawn(mb_joint!(shld_roll, RevoluteJointBuilder::new(Vec3::Z))).id();
+    let target_vel = 10f32.to_radians();
+    let stiffness = 1.;
+    let damping = 0.05;
+
+    let shld_pitch = commands.spawn(mb_joint!(fixed, RevoluteJointBuilder::new(Vec3::X)
+        .motor(0., target_vel, stiffness, damping)
+    )).id();
+    let shld_roll = commands.spawn(mb_joint!(shld_pitch, RevoluteJointBuilder::new(Vec3::Y)
+        .motor(0., target_vel, stiffness, damping)
+    )).id();
+    let shld_yaw = commands.spawn(mb_joint!(shld_roll, RevoluteJointBuilder::new(Vec3::Z)
+        .motor(0., target_vel, stiffness, damping)
+    )).id();
 
     let upper_arm_collider = commands.spawn((
         RigidBody::Dynamic,
         Collider::capsule_y(half_height, radius),
-        MultibodyJoint::new(shld_yaw, FixedJointBuilder::new().local_anchor2(Vec3::Y * half_size))
+        MultibodyJoint::new(shld_yaw, FixedJointBuilder::new().local_anchor2(Vec3::Y * half_size)),
     )).id();
 
-    //removing this code prevents the crash
-    {
-        let elbow_pitch = commands.spawn(mb_joint!(shld_yaw, RevoluteJointBuilder::new(Vec3::X)
-            .local_anchor1(Vec3::Y * -size)
-        )).id();
-    }
+    let elb_pitch = commands.spawn(mb_joint!(shld_yaw, RevoluteJointBuilder::new(Vec3::X)
+        .local_anchor1(Vec3::Y * -size)
+        .motor(0., target_vel, stiffness, damping)
+    )).id();
+    let elb_roll = commands.spawn(mb_joint!(elb_pitch, RevoluteJointBuilder::new(Vec3::Y)
+        .motor(0., target_vel, stiffness, damping)
+    )).id();
+
+    let lower_arm_collider = commands.spawn((
+        RigidBody::Dynamic,
+        Collider::capsule_y(half_height, radius),
+        MultibodyJoint::new(elb_roll, FixedJointBuilder::new().local_anchor2(Vec3::Y * half_size)),
+    ));
 }
