@@ -1,7 +1,7 @@
 use bevy::prelude::{App, Bundle, Component, Entity, Last, Plugin};
 use bevy::utils::default;
 use k::{Chain, connect, Error, InverseKinematicsSolver, Isometry3, JacobianIkSolver, JointType, NodeBuilder, RealField, SerialChain, SubsetOf};
-use crate::arm::{AttachedArmChain, ArmInfo, BodySegment, CapsuleSegment, EntityChain};
+use crate::arm::{AttachedArmChain, EntityChain};
 use crate::ik_systems::prepare_ik_nodes;
 
 
@@ -9,10 +9,8 @@ pub struct IKPlugin;
 
 impl Plugin for IKPlugin {
     fn build(&self, app: &mut App) {
-        use bevy_trait_query::RegisterExt;
 
         app
-            .register_component_as::<dyn BodySegment, CapsuleSegment>()
             .add_systems(Last, prepare_ik_nodes);
     }
 }

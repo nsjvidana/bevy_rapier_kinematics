@@ -1,11 +1,10 @@
 use core::panic;
 
-use bevy::{app::{App, PostUpdate, Startup, Update}, math::Vec3, prelude::{default, Camera3dBundle, Capsule3d, Commands, Component, Entity, IntoSystemConfigs, Local, Query, Res}, transform::components::Transform, DefaultPlugins};
+use bevy::{app::{App, PostUpdate}, math::Vec3, prelude::{default, Camera3dBundle, Commands, Component, Entity, IntoSystemConfigs, Local, Query, Res}, transform::components::Transform, DefaultPlugins};
 use bevy_flycam::{FlyCam, NoCameraPlayerPlugin};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
-use bevy_rapier3d::{dynamics::{FixedJointBuilder, GenericJoint, GenericJointBuilder, ImpulseJoint, JointAxesMask, JointAxis, MultibodyJoint, RevoluteJointBuilder, RigidBody, Sleeping, SphericalJointBuilder}, geometry::{Collider, Sensor}, math::Real, na::{Isometry3, UnitQuaternion}, plugin::{PhysicsSet, RapierContext, RapierPhysicsPlugin}, render::{DebugRenderMode, RapierDebugRenderPlugin}};
+use bevy_rapier3d::{dynamics::{MultibodyJoint, RevoluteJointBuilder, RigidBody, Sleeping, SphericalJointBuilder}, geometry::Collider, math::Real, na::Isometry3, plugin::{PhysicsSet, RapierContext, RapierPhysicsPlugin}, render::{DebugRenderMode, RapierDebugRenderPlugin}};
 use k::{InverseKinematicsSolver, SerialChain};
-use rand::seq::SliceRandom;
 
 use crate::{math_utils::{project_onto_plane, vec3_y}, physics::{toggle_contacts_with, ToggleContactsWith}};
 
@@ -54,10 +53,10 @@ pub fn thing(
             .set_contacts_enabled(false);
 
         let mb_joint = if i%2 == 0 {
-            MultibodyJoint::new(last_body, revolute)
+            MultibodyJoint::new(last_body, revolute.into())
         }
         else {
-            MultibodyJoint::new(last_body, revolute)
+            MultibodyJoint::new(last_body, revolute.into())
         };
 
         last_body = commands.spawn((
@@ -67,59 +66,6 @@ pub fn thing(
             mb_joint
         )).id();
     }
-}
-
-
-fn arm_stuff() {
-    // let shoulder_x = commands.spawn(mb_joint!(fixed, RevoluteJointBuilder::new(Vec3::X)
-    // .motor(0., target_vel, stiffness, damping)
-    // )).id();
-    // let shoulder_y = commands.spawn(mb_joint!(shoulder_x, RevoluteJointBuilder::new(Vec3::Y)
-    //     .motor(0., target_vel, stiffness, damping)
-    // )).id();
-    // let shoulder_z = commands.spawn(mb_joint!(shoulder_y, RevoluteJointBuilder::new(Vec3::Z)
-    //     .motor(0., target_vel, stiffness, damping)
-    // )).id();
-
-    // let radius = 0.05;
-    // let segment_shape = Capsule3d {
-    //     half_length: 0.3 - radius,
-    //     radius,
-    // };
-    // let upper_arm = commands.spawn((
-    //     RigidBody::Dynamic,
-    //     Sleeping::default(),
-    //     ImpulseJoint::new(shoulder_z, FixedJointBuilder::new()
-    //         .local_anchor2(vec3_y(segment_shape.half_length+radius))
-    //     ),
-    //     Collider::capsule_y(segment_shape.half_length, radius),
-    // )).id();
-
-    // let elbow_pitch = commands.spawn(mb_joint!(upper_arm, RevoluteJointBuilder::new(Vec3::X)
-    //     .local_anchor1(vec3_y(-segment_shape.half_length-radius))
-    //     .motor(0., target_vel, stiffness, damping)
-    // )).id();
-    // let elbow_roll = commands.spawn(mb_joint!(elbow_pitch, RevoluteJointBuilder::new(Vec3::Y)
-    //     .motor(0., target_vel, stiffness, damping)
-    // )).id();
-    
-    // let lower_arm = commands.spawn((
-    //     RigidBody::Dynamic,
-    //     Sleeping::default(),
-    //     ImpulseJoint::new(elbow_roll, FixedJointBuilder::new()
-    //         .local_anchor2(vec3_y(segment_shape.half_length+radius))
-    //     ),
-    //     Collider::capsule_y(segment_shape.half_length, radius),
-    //     ToggleContactsWith::new(upper_arm, false)
-    // )).id();
-    
-    // let wrist_pitch = commands.spawn(mb_joint!(lower_arm, RevoluteJointBuilder::new(Vec3::X)
-    //     .local_anchor1(vec3_y(-segment_shape.half_length-radius))
-    //     .motor(0., target_vel, stiffness, damping)
-    // )).id();
-    // let wrist_yaw = commands.spawn(mb_joint!(wrist_pitch, RevoluteJointBuilder::new(Vec3::Z)
-    //     .motor(0., target_vel, stiffness, damping)
-    // )).id();
 }
 
 fn update(
@@ -274,10 +220,10 @@ pub fn test() {
         ;
 
 
-    let mut movement_settings = app.world.get_resource_mut::<bevy_flycam::MovementSettings>().unwrap();
+    let mut movement_settings = app.world_mut().get_resource_mut::<bevy_flycam::MovementSettings>().unwrap();
     movement_settings.speed = 3.;
 
-    app.run()
+    app.run();
 }
 
 pub struct CyclicThing<T: k::RealField + k::SubsetOf<f64>> {

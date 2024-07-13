@@ -83,10 +83,10 @@ pub fn solve_ik(
         let shoulder_joints = arm_chain.shoulder_joints();
 
         joint_q.get_mut(shoulder_joints[0]).unwrap()
-            .data.raw.motors[JointAxis::AngX as usize].target_pos = shld_x;
+            .data.as_mut().raw.motors[JointAxis::AngX as usize].target_pos = shld_x;
         joint_q.get_mut(shoulder_joints[1]).unwrap()
-            .data.raw.motors[JointAxis::AngY as usize].target_pos = shld_y;
+            .data.as_mut().raw.motors[JointAxis::AngY as usize].target_pos = shld_y;
         joint_q.get_mut(shoulder_joints[2]).unwrap()
-            .data.raw.motors[JointAxis::AngZ as usize].target_pos = shld_z;
+            .data.as_mut().raw.motors[JointAxis::AngZ as usize].target_pos = shld_z;
     }
 }
