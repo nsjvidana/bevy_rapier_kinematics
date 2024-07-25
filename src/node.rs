@@ -111,9 +111,10 @@ impl KNodeBuilder {
 pub struct KJoint {
     pub name: String,
     joint_type: KJointType,
+    /// The origin local transform of the joint.
+    origin: Isometry3<Real>,
     position: Real,
     pub limits: [Real; 2],
-    origin: Isometry3<Real>,
     world_transform_cache: Option<Isometry3<Real>>,
 }
 
@@ -178,15 +179,12 @@ impl KJoint {
 
     pub fn local_transform(&self) -> Isometry3<Real> {
         match self.joint_type {
-            KJointType::Fixed => Isometry3::identity(),
-            KJointType::Linear { axis } => Isometry3 {
-                translation: Translation3::from(axis.into_inner() * self.position),
-                ..Default::default()
-            },
-            KJointType::Revolute { axis } => Isometry3 {
-                rotation: UnitQuaternion::from_axis_angle(&axis, self.position),
-                ..Default::default()
-            }
+            KJointType::Fixed => 
+                Isometry3::identity(),
+            KJointType::Linear { axis } => 
+                self.origin * Translation3::from(axis.into_inner() * self.position),
+            KJointType::Revolute { axis } => 
+                self.origin * UnitQuaternion::from_axis_angle(&axis, self.position)
         }
     }
 }
