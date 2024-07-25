@@ -3,6 +3,8 @@ mod ik;
 mod arm;
 mod physics;
 mod testing;
+mod chain;
+mod node;
 
 use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
 use bevy_rapier3d::plugin::RapierPhysicsPlugin;
