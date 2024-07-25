@@ -6,7 +6,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::{dynamics::{MultibodyJoint, RevoluteJointBuilder, RigidBody, Sleeping, SphericalJointBuilder}, geometry::Collider, math::Real, na::Isometry3, plugin::{PhysicsSet, RapierContext, RapierPhysicsPlugin}, render::{DebugRenderMode, RapierDebugRenderPlugin}};
 use k::{InverseKinematicsSolver, SerialChain};
 
-use crate::{math_utils::{project_onto_plane, vec3_y}, physics::{toggle_contacts_with, ToggleContactsWith}};
+use crate::{math_utils::{project_onto_plane_k, vec3_y}, physics::{toggle_contacts_with, ToggleContactsWith}};
 
 pub fn thing(
     mut commands: Commands
@@ -263,8 +263,8 @@ where
                 transform
             };
             
-            let target_projected = project_onto_plane(&local_target.translation.vector, joint_axis);
-            let end_projected = project_onto_plane(&local_end.translation.vector, joint_axis);
+            let target_projected = project_onto_plane_k(&local_target.translation.vector, joint_axis);
+            let end_projected = project_onto_plane_k(&local_end.translation.vector, joint_axis);
             node.set_joint_position_clamped(
                 //get angle between the projected vectors
                 T::acos(end_projected.dot(&target_projected) / (end_projected.norm() * target_projected.norm()))

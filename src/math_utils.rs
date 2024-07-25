@@ -14,7 +14,7 @@ pub trait Conversion<A, B> {
 
 
 #[inline]
-pub fn project_onto_plane<T: k::RealField>(vector: &k::Vector3<T>, plane_normal: &k::nalgebra::UnitVector3<T>) -> k::Vector3<T> {
+pub fn project_onto_plane_k<T: k::RealField>(vector: &k::Vector3<T>, plane_normal: &k::nalgebra::UnitVector3<T>) -> k::Vector3<T> {
     let normsq = plane_normal.norm_squared();
     let dot = vector.dot(plane_normal);
     let div = dot / normsq;
@@ -22,6 +22,18 @@ pub fn project_onto_plane<T: k::RealField>(vector: &k::Vector3<T>, plane_normal:
         vector.x.clone() - plane_normal.x.clone() * div.clone(),
         vector.y.clone() - plane_normal.y.clone() * div.clone(),
         vector.z.clone() - plane_normal.z.clone() * div
+    )
+}
+
+#[inline]
+pub fn project_onto_plane(vector: &Vector3<Real>, plane_normal: &UnitVector3<Real>) -> Vector3<Real> {
+    let normsq = plane_normal.norm_squared();
+    let dot = vector.dot(plane_normal);
+    let div = dot / normsq;
+    Vector3::<Real>::new(
+        vector.x - plane_normal.x * div,
+        vector.y - plane_normal.y * div,
+        vector.z - plane_normal.z * div
     )
 }
 

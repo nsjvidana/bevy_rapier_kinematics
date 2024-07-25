@@ -1,5 +1,6 @@
-use std::{cell::RefCell, ops::Deref, rc::{Rc, Weak}};
+use std::{cell::RefCell, ops::{Deref, DerefMut}, rc::{Rc, Weak}};
 
+use bevy::scene::ron::error;
 use thiserror::Error;
 use bevy_rapier3d::{math::Real, na::{Isometry3, Translation3, UnitQuaternion, UnitVector3}};
 
@@ -25,6 +26,10 @@ impl KNode {
         }
     }
 
+    pub fn joint_mut(&self) -> KJointRefMut {
+        KJointRefMut { node_ref: (*self.0).borrow_mut() }
+    }
+
     pub fn joint_position(&self) -> Real {
         self.joint().position
     }
@@ -38,6 +43,23 @@ impl<'a> Deref for KJointRef<'a> {
     type Target = KJoint;
     fn deref(&self) -> &Self::Target {
         &self.node_ref.joint
+    }
+}
+
+pub struct KJointRefMut<'a> {
+    node_ref: std::cell::RefMut<'a, KNodeData>
+}
+
+impl<'a> Deref for KJointRefMut<'a> {
+    type Target = KJoint;
+    fn deref(&self) -> &Self::Target {
+        &self.node_ref.joint
+    }
+}
+
+impl<'a> DerefMut for KJointRefMut<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.node_ref.joint
     }
 }
 
@@ -120,6 +142,19 @@ impl KJoint {
         Ok(self)
     }
 
+    pub fn set_position_clamped(&mut self, pos: Real) {
+        if pos < self.limits[0] {
+            self.position = self.limits[0];
+        }
+        else if pos > self.limits[1] {
+            self.position = self.limits[1];
+        }
+        else {
+            self.position = pos;
+        }
+        self.clear_cache();
+    }
+
     pub fn set_position_unchecked(&mut self, pos: Real) -> &mut Self {
         self.position = pos;
         self.clear_cache();
@@ -144,9 +179,27 @@ impl KJoint {
     pub fn clear_cache(&mut self) {
         self.world_transform_cache = None;
     }
+
+    pub fn joint_type(&self) -> &KJointType {
+        &self.joint_type
+    }
+
+    pub fn local_transform(&self) -> Isometry3<Real> {
+        match self.joint_type {
+            KJointType::Fixed => Isometry3::identity(),
+            KJointType::Linear { axis } => Isometry3 {
+                translation: Translation3::from(axis.into_inner() * self.position),
+                ..Default::default()
+            },
+            KJointType::Revolute { axis } => Isometry3 {
+                rotation: UnitQuaternion::from_axis_angle(&axis, self.position),
+                ..Default::default()
+            }
+        }
+    }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub enum KJointType {
     #[default]
     Fixed,
@@ -157,6 +210,7 @@ pub enum KJointType {
         axis: UnitVector3<Real>
     },
 }
+
 
 #[derive(Debug, Error)]
 pub enum KError {
@@ -175,6 +229,25 @@ pub enum KError {
         position: Real,
         min_limit: Real,
         max_limit: Real,
+    },
+    #[error("Solver incompatible with joint \"{0}\" of type {1}. Solver type: {2}", joint_name, joint_type, solver_type)]
+    SolverIncompatibleWithJointType {
+        joint_name: String,
+        joint_type: String,
+        solver_type: String
+    },
+    #[error(
+        "IK Solver of type {0} tried {1} times but did not converge. position_diff = {2}, angle_diff = {3}",
+        solver_type,
+        num_tries,
+        position_diff,
+        angle_diff
+    )]
+    SolverNotConverged {
+        solver_type: String,
+        num_tries: usize,
+        position_diff: Real,
+        angle_diff: Real,
     }
 }
 
