@@ -68,49 +68,41 @@ impl<'a> DerefMut for KJointRefMut<'a> {
 pub struct KNodeBuilder(pub(crate) KNodeData);
 
 impl KNodeBuilder {
-    #[inline]
-    pub fn new() {
-        KNodeBuilder::default();
+    pub fn new() -> Self {
+        KNodeBuilder::default()
     }
 
-    #[inline]
     pub fn joint_type(mut self, joint_type: KJointType) -> Self {
         self.0.joint.joint_type = joint_type;
         self
     }
 
-    #[inline]
     pub fn origin(mut self, origin: Isometry3<Real>) -> Self {
         self.0.joint.origin = origin;
         self
     }
 
-    #[inline]
     pub fn translation(mut self, translation: Translation3<Real>) -> Self {
         self.0.joint.origin.translation = translation;
         self
     }
 
-    #[inline]
     pub fn rotation(mut self, rotation: UnitQuaternion<Real>) -> Self {
         self.0.joint.origin.rotation = rotation;
         self
     }
 
-    #[inline]
     pub fn limits(mut self, limits: [Real; 2]) -> Self {
         self.0.joint.limits = limits;
         self
     }
 
-    #[inline]
     pub fn name(mut self, name: String) -> Self {
         self.0.joint.name = name;
         self
     }
 
-    #[inline]
-    pub fn into_knode(self) -> KNode {
+    pub fn build(self) -> KNode {
         KNode(Rc::new(RefCell::new(self.0)))
     }
 }
@@ -251,13 +243,26 @@ pub enum KError {
     }
 }
 
+/// Easily set parents of nodes in the order given.
+///
+/// ```
+/// let n0 = KNodeBuilder::new().build();
+/// let n1 = KNodeBuilder::new().build();
+/// let n2 = KNodeBuilder::new().build();
+///
+/// chain_nodes![n0 => n1 => n2];
+/// 
+/// // equivalent code:
+/// // n1.set_parent(&n0);
+/// // n2.set_parent(&n1);
+/// ```
 #[macro_export]
 macro_rules! chain_nodes {
-    ($n1:expr => $n2:expr) => {
-        $n2.set_parent(&$n1);
+    ($n0:expr => $n1:expr) => {
+        $n1.set_parent(&$n0);
     };
-    ($n1:expr => $n2:expr => $($nn:tt)+) => {
-        $n2.set_parent(&$n1);
-        $crate::connect!($n2 => $($nn)*);
+    ($n0:expr => $n1:expr => $($rest:tt)+) => {
+        $n1.set_parent(&$n0);
+        $crate::chain_nodes!($n1 => $($rest)*);
     };
 }
