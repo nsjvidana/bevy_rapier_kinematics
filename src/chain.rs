@@ -1,10 +1,22 @@
 use crate::node::{KJointRef, KJointRefMut, KNode};
 
+#[derive(Default)]
 pub struct SerialKChain {
     nodes: Vec<KNode>
 }
 
 impl SerialKChain {
+    pub fn from_root(root: &KNode) -> Self {
+        let mut chain = SerialKChain::default();
+        chain.nodes.push(root.clone());
+
+        for child in root.iter_children() {
+            chain.nodes.push(child);
+        }
+
+        chain
+    }
+
     pub fn iter_joints(&self) -> impl Iterator<Item = KJointRef<'_>> {
         self.nodes.iter().map(|n| n.joint())
     }

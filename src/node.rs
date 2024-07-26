@@ -1,13 +1,14 @@
 use std::{cell::RefCell, ops::{Deref, DerefMut}, rc::{Rc, Weak}};
 
-use bevy::scene::ron::error;
 use thiserror::Error;
 use bevy_rapier3d::{math::Real, na::{Isometry3, Translation3, UnitQuaternion, UnitVector3}};
+
+use crate::iterator::KNodeChildren;
 
 #[derive(Default)]
 pub struct KNodeData {
     pub parent: Option<Weak<RefCell<KNodeData>>>,
-    pub children: Vec<KNode>,
+    pub child: Option<KNode>,
     joint: KJoint,
 }
 
@@ -17,7 +18,11 @@ pub struct KNode(pub(crate) Rc<RefCell<KNodeData>>);
 impl KNode {
     pub fn set_parent(&self, parent: &KNode) {
         (*self.0).borrow_mut().parent = Some(Rc::downgrade(&parent.0));
-        (*parent.0).borrow_mut().children.push(self.clone());
+        (*parent.0).borrow_mut().child = Some(self.clone());
+    }
+
+    pub fn iter_children(&self) -> KNodeChildren {
+        KNodeChildren::new(self.clone())
     }
 
     pub fn joint(&self) -> KJointRef {
