@@ -30,7 +30,7 @@ impl CyclicIKSolver {
             //store the end effector's world space transform to avoid having to compute it twice
             let mut end_world_space = None;
             
-            for (i, node) in chain.iter().enumerate() {
+            for (i, node) in chain.iter().enumerate().rev() {
                 let mut curr_joint = node.joint_mut();
                 let joint_axis = match curr_joint.joint_type() {
                     KJointType::Revolute { axis } => axis,

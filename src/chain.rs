@@ -1,3 +1,5 @@
+use std::slice::Iter;
+
 use bevy_rapier3d::na::Isometry3;
 
 use crate::node::{KJointRef, KJointRefMut, KNode};
@@ -27,7 +29,7 @@ impl SerialKChain {
         self.nodes.iter_mut().map(|n| n.joint_mut())
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &KNode> {
+    pub fn iter(&self) -> Iter<KNode> {
         self.nodes.iter()
     }
 
