@@ -12,7 +12,7 @@ use bevy_rapier3d::na::{Isometry3, SimdValue, UnitVector3, Vector, Vector3};
 use bevy_rapier3d::plugin::RapierPhysicsPlugin;
 use bevy_rapier3d::prelude::{Collider, RigidBody};
 use bevy_rapier3d::render::RapierDebugRenderPlugin;
-use bevy::math::Vec3;
+use bevy::math::{Vec3, VectorSpace};
 use bevy::prelude::*;
 use chain::SerialKChain;
 use ik::CyclicIKSolver;
@@ -46,7 +46,7 @@ pub fn startup(
     //camera
     commands.spawn((
         Camera3dBundle {
-            transform: Transform::from_xyz(2., 2., 2.)
+            transform: Transform::from_xyz(0., 2., 2.)
                 .looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         },
@@ -59,14 +59,33 @@ pub fn startup(
         Collider::cuboid(10., 0.1, 10.),
         Transform::from_xyz(0., -5., 0.),
     ));
+
+    //test object
+    commands.spawn((
+        PbrBundle {
+            mesh: meshes.add(Sphere::new(0.1)),
+            material: materials.add(Color::linear_rgb(1., 0., 0.)),
+            ..default()
+        },
+        TestObject,
+    ));
 }
+
+#[derive(Component)]
+pub struct TestObject;
 
 pub fn update(
     mut gizmos: Gizmos,
     keys: Res<ButtonInput<KeyCode>>,
-    cam_query: Query<&Transform, With<FlyCam>>
+    mut target_q: Query<&mut Transform, With<TestObject>>,
+    time: Res<Time>,
 ) {
-    let cam_transform = cam_query.get_single().ok().unwrap();
+    let mut targ_transform = target_q.get_single_mut().ok().unwrap();
+
+    let x_movement = (keys.pressed(KeyCode::ArrowRight) as i8 - keys.pressed(KeyCode::ArrowLeft) as i8) as f32;
+    let y_movement = (keys.pressed(KeyCode::KeyU) as i8 - keys.pressed(KeyCode::KeyJ) as i8) as f32;
+    let z_movement = (keys.pressed(KeyCode::ArrowDown) as i8 - keys.pressed(KeyCode::ArrowUp) as i8) as f32;
+    targ_transform.translation += Vec3::new(x_movement, y_movement, z_movement) * time.delta_seconds();
 
     let base = KNodeBuilder::new()
         .joint_type(KJointType::Revolute { axis: Vector3::y_axis() })
@@ -88,18 +107,22 @@ pub fn update(
         max_iterations: 1
     };
     let solver_result = solver.solve(&mut chain, Isometry3 {
-        rotation: cam_transform.rotation.into(),
-        translation: cam_transform.translation.into(),
+        rotation: targ_transform.rotation.into(),
+        translation: targ_transform.translation.into(),
     });
     chain.update_world_transforms();
 
+    let mut prev = Vec3::ZERO;
     for joint in chain.iter_joints() {
+        let joint_pos: Vec3 = joint.world_transform().unwrap().translation.into();
         gizmos.sphere(
-            joint.world_transform().unwrap().translation.into(),
+            joint_pos,
             default(),
             0.05,
             Color::linear_rgb(0., 1., 0.)
         );
+        gizmos.line(prev, joint_pos, Color::linear_rgb(0., 0., 1.));
+        prev = joint_pos;
     }
 
     if solver_result.is_err() {

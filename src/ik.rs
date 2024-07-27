@@ -69,7 +69,7 @@ impl CyclicIKSolver {
                 let end_projected = project_onto_plane(&local_end.translation.vector, joint_axis);
                 //the angle between the projected vectors is the joint's position (limited by joint limits)
                 curr_joint.set_position_clamped(
-                    target_projected.angle(&end_projected)
+                    end_projected.angle(&target_projected)
                 );
             }
             
