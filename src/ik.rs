@@ -1,7 +1,7 @@
 use std::ops::DerefMut;
 
 use bevy::prelude::{App, Plugin};
-use bevy_rapier3d::{math::Real, na::Isometry3};
+use bevy_rapier3d::{math::Real, na::{Isometry3, Vector3}};
 
 use crate::{chain::SerialKChain, math_utils::{project_onto_plane, project_onto_plane_k}, node::{KError, KJointType}};
 
@@ -31,22 +31,23 @@ impl CyclicIKSolver {
             let mut end_world_space = None;
             
             for (i, node) in chain.iter().enumerate() {
-                let joint = node.joint();
-                let joint_axis = match joint.joint_type() {
+                let mut curr_joint = node.joint_mut();
+                let joint_axis = match curr_joint.joint_type() {
                     KJointType::Revolute { axis } => axis,
                     KJointType::Fixed => continue,
                     _ => return Err(KError::SolverIncompatibleWithJointType {
-                        joint_name: joint.name.clone(),
-                        joint_type: format!("{:?}", joint.joint_type()),
+                        joint_name: curr_joint.name.clone(),
+                        joint_type: format!("{:?}", curr_joint.joint_type()),
                         solver_type: "Cyclic".into()
                     })
                 };
 
                 let joint_space = {
                     let mut transform = Isometry3::identity();
-                    for node in chain.iter().take(i+1) {
+                    for node in chain.iter().take(i) {
                         transform *= node.joint().local_transform();
                     }
+                    transform *= curr_joint.local_transform();
                     transform
                 };
                 
@@ -67,12 +68,12 @@ impl CyclicIKSolver {
                 let target_projected = project_onto_plane(&local_target.translation.vector, joint_axis);
                 let end_projected = project_onto_plane(&local_end.translation.vector, joint_axis);
                 //the angle between the projected vectors is the joint's position (limited by joint limits)
-                node.joint_mut().set_position_clamped(
-                    Real::acos(end_projected.dot(&target_projected) / (end_projected.norm() * target_projected.norm()))
+                curr_joint.set_position_clamped(
+                    target_projected.angle(&end_projected)
                 );
             }
             
-            //skip all the other iterations if we already reached the target pose.
+            //skip all the other iterations if we already reached the target pose.  
             let end_world_space = end_world_space.unwrap();
             dist_to_target = end_world_space.translation.vector.metric_distance(&target_pose.translation.vector);
             angle_to_target = end_world_space.rotation.angle_to(&target_pose.rotation);

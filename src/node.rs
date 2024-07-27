@@ -1,5 +1,7 @@
 use std::{cell::RefCell, ops::{Deref, DerefMut}, rc::{Rc, Weak}};
 
+use bevy::prelude::default;
+use derivative::Derivative;
 use thiserror::Error;
 use bevy_rapier3d::{math::Real, na::{Isometry3, Translation3, UnitQuaternion, UnitVector3}};
 
@@ -9,7 +11,7 @@ use crate::iterator::KNodeChildren;
 pub struct KNodeData {
     pub parent: Option<Weak<RefCell<KNodeData>>>,
     pub child: Option<KNode>,
-    joint: KJoint,
+    pub(crate) joint: KJoint,
 }
 
 #[derive(Clone)]
@@ -112,18 +114,24 @@ impl KNodeBuilder {
     }
 }
 
-#[derive(Default)]
+#[derive(Derivative)]
+#[derivative(Default)]
 pub struct KJoint {
     pub name: String,
     joint_type: KJointType,
     /// The origin local transform of the joint.
     origin: Isometry3<Real>,
     position: Real,
+    #[derivative(Default(value="[f32::NEG_INFINITY, f32::INFINITY]"))]
     pub limits: [Real; 2],
-    world_transform_cache: Option<Isometry3<Real>>,
+    pub(crate) world_transform_cache: Option<Isometry3<Real>>,
 }
 
 impl KJoint {
+    pub fn position(&self) -> Real {
+        self.position
+    }
+
     pub fn set_position(&mut self, pos: Real) -> Result<&mut Self, KError> {
         match self.joint_type {
             KJointType::Fixed => {
@@ -191,6 +199,10 @@ impl KJoint {
             KJointType::Revolute { axis } => 
                 self.origin * UnitQuaternion::from_axis_angle(&axis, self.position)
         }
+    }
+
+    pub fn world_transform(&self) -> Option<Isometry3<Real>> {
+        self.world_transform_cache
     }
 }
 

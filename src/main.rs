@@ -5,13 +5,19 @@ mod physics;
 mod testing;
 mod chain;
 mod node;
+mod iterator;
 
 use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
+use bevy_rapier3d::na::{Isometry3, SimdValue, UnitVector3, Vector, Vector3};
 use bevy_rapier3d::plugin::RapierPhysicsPlugin;
-use bevy_rapier3d::prelude::{Collider, FixedJointBuilder, MultibodyJoint, RevoluteJointBuilder, RigidBody};
+use bevy_rapier3d::prelude::{Collider, RigidBody};
 use bevy_rapier3d::render::RapierDebugRenderPlugin;
 use bevy::math::Vec3;
 use bevy::prelude::*;
+use chain::SerialKChain;
+use ik::CyclicIKSolver;
+use math_utils::project_onto_plane;
+use node::{KJointType, KNodeBuilder};
 
 fn main() {
     let mut app = App::new();
@@ -20,7 +26,8 @@ fn main() {
         RapierPhysicsPlugin::<()>::default(),
         RapierDebugRenderPlugin::default(),
     ))
-        .add_systems(Startup, startup);
+        .add_systems(Startup, startup)
+        .add_systems(Update, update);
 
     //flycam stuff
     app.add_plugins(NoCameraPlayerPlugin);
@@ -31,7 +38,9 @@ fn main() {
 }
 
 pub fn startup(
-    mut commands: Commands
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>
 ) {
     //camera
     commands.spawn((
@@ -43,52 +52,81 @@ pub fn startup(
         FlyCam,
         Collider::ball(0.1)
     ));
-
-    let fixed = commands.spawn((
+    //ground
+    commands.spawn((
         RigidBody::Fixed,
-        Transform::default()
-    )).id();
+        Collider::cuboid(10., 0.1, 10.),
+        Transform::from_xyz(0., -5., 0.),
+    ));
+}
 
-    macro_rules! mb_joint {
-        ($parent:expr, $joint:expr) => {
-            (
-                RigidBody::Dynamic,
-                Transform::default(),
-                MultibodyJoint::new($parent, $joint)
-            )
-        };
+pub fn update(
+    mut gizmos: Gizmos,
+    keys: Res<ButtonInput<KeyCode>>,
+    cam_query: Query<&Transform, With<FlyCam>>
+) {
+    let cam_transform = cam_query.get_single().ok().unwrap();
+
+    let lim = [-60f32.to_radians(), 60f32.to_radians()];
+
+    let fixed = KNodeBuilder::new().joint_type(KJointType::Fixed)
+        .build();
+    let shoulder_x = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector::x_axis() })
+        .limits(lim)
+        .build();
+    let shoulder_y = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector::y_axis() })
+        .limits(lim)
+        .build();
+    let shoulder_z = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector::z_axis() })
+        .limits(lim)
+        .build();
+    
+    let elbow_x = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector::x_axis() })
+        .translation(Vector3::new(0., -0.8, 0.).into())
+        .limits(lim)
+        .build();
+    let elbow_y = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector::y_axis() })
+        .limits(lim)
+        .build();
+    
+    let wrist_x = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector::x_axis() })
+        .translation(Vector3::new(0., -1., 0.).into())
+        .limits(lim)
+        .build(); 
+    let wrist_z = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector::z_axis() })
+        .limits(lim)
+        .build();
+
+    chain_nodes![fixed => shoulder_x => shoulder_y => shoulder_z => elbow_x => elbow_y => wrist_x => wrist_z];
+    let mut chain = SerialKChain::from_root(&fixed);
+    let solver = CyclicIKSolver {
+        allowable_target_distance: 0.1,
+        allowable_target_angle: 1f32.to_radians(),
+        max_iterations: 1
+    };
+    let solver_result = solver.solve(&mut chain, Isometry3 {
+        rotation: cam_transform.rotation.into(),
+        translation: cam_transform.translation.into(),
+    });
+    chain.update_world_transforms();
+
+    for joint in chain.iter_joints() {
+        gizmos.sphere(
+            joint.world_transform().unwrap().translation.into(),
+            default(),
+            0.05,
+            Color::linear_rgb(0., 1., 0.)
+        );
     }
 
-    let half_height = 0.3;
-    let radius = 0.05;
-    let size = (half_height+radius) * 2.;
-    let half_size = size/2.;
-
-    let target_vel = 10f32.to_radians();
-    let stiffness = 1.;
-    let damping = 0.05;
-
-
-    let shld_pitch = commands.spawn(mb_joint!(fixed, RevoluteJointBuilder::new(Vec3::X).into())).id();
-    let shld_roll = commands.spawn(mb_joint!(shld_pitch, RevoluteJointBuilder::new(Vec3::Y).into())).id();
-    let shld_yaw = commands.spawn(mb_joint!(shld_roll, RevoluteJointBuilder::new(Vec3::Z).into())).id();
-
-    let upper_arm_collider = commands.spawn((
-        RigidBody::Dynamic,
-        Collider::capsule_y(half_height, radius),
-        MultibodyJoint::new(shld_yaw, FixedJointBuilder::new().local_anchor2(Vec3::Y * half_size).into()),
-    )).id();
-
-    let elb_pitch = commands.spawn(mb_joint!(upper_arm_collider, RevoluteJointBuilder::new(Vec3::X)
-        .local_anchor1(Vec3::Y * -size)
-        .into()
-    )).id();
-    let elb_roll = commands.spawn(mb_joint!(elb_pitch, RevoluteJointBuilder::new(Vec3::Y).into()
-    )).id();
-
-    let lower_arm_collider = commands.spawn((
-        RigidBody::Dynamic,
-        Collider::capsule_y(half_height, radius),
-        MultibodyJoint::new(elb_roll, FixedJointBuilder::new().local_anchor2(Vec3::Y * half_size).into()),
-    ));
+    if solver_result.is_err() {
+        println!("{}", solver_result.err().unwrap());
+    }
 }

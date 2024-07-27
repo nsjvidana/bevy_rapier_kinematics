@@ -1,3 +1,5 @@
+use bevy_rapier3d::na::Isometry3;
+
 use crate::node::{KJointRef, KJointRefMut, KNode};
 
 #[derive(Default)]
@@ -31,5 +33,19 @@ impl SerialKChain {
 
     pub fn len(&self) -> usize {
         self.nodes.len()
+    }
+
+    pub fn update_world_transforms(&mut self) {
+        for (i, node) in self.iter().enumerate() {
+            let mut curr_joint = node.joint_mut();
+
+            let mut transform = Isometry3::identity();
+            for joint in self.iter_joints().take(i) {
+                transform *= joint.local_transform();
+            }
+            transform *= curr_joint.local_transform();
+
+            curr_joint.world_transform_cache = Some(transform);
+        }
     }
 }
