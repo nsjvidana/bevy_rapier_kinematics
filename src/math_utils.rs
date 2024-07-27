@@ -1,7 +1,7 @@
 use std::f32::consts::PI;
 use bevy::math::*;
 use bevy_rapier3d::math::Real;
-use bevy_rapier3d::na::{Matrix3, UnitQuaternion, UnitVector3, Vector, Vector3, Rotation3};
+use bevy_rapier3d::na::{Matrix3, Rotation3, SimdRealField, UnitQuaternion, UnitVector3, Vector, Vector3};
 use bevy_rapier3d::rapier::utils::SimdBasis;
 
 pub const FRAC_PI_12: f32 = PI/12.;
@@ -34,6 +34,18 @@ pub fn project_onto_plane(vector: &Vector3<Real>, plane_normal: &UnitVector3<Rea
         vector.x - plane_normal.x * div,
         vector.y - plane_normal.y * div,
         vector.z - plane_normal.z * div
+    )
+}
+
+/// Computes the angle from vector `a` to vector `b` that lie on the same plane
+/// that has a normal `n`.
+/// 
+/// The angle that is returned comes with the appropriate sign for a right-handed rotation
+/// (Positive angle for counterclockwise rotation, negative for clockwise)
+pub fn angle_between(a: &Vector3<Real>, b: &Vector3<Real>, n: &UnitVector3<Real>) -> Real {
+    SimdRealField::simd_atan2(
+        a.cross(b).dot(n),
+        a.dot(b)
     )
 }
 

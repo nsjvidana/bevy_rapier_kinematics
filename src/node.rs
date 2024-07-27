@@ -1,6 +1,5 @@
 use std::{cell::RefCell, ops::{Deref, DerefMut}, rc::{Rc, Weak}};
 
-use bevy::prelude::default;
 use derivative::Derivative;
 use thiserror::Error;
 use bevy_rapier3d::{math::Real, na::{Isometry3, Translation3, UnitQuaternion, UnitVector3}};

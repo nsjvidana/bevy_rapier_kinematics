@@ -1,15 +1,13 @@
-use std::ops::DerefMut;
-
 use bevy::prelude::{App, Plugin};
-use bevy_rapier3d::{math::Real, na::{Isometry3, Vector3}};
+use bevy_rapier3d::{math::Real, na::Isometry3};
 
-use crate::{chain::SerialKChain, math_utils::{project_onto_plane, project_onto_plane_k}, node::{KError, KJointType}};
+use crate::{chain::SerialKChain, math_utils::{angle_between, project_onto_plane}, node::{KError, KJointType}};
 
 
 pub struct IKPlugin;
 
 impl Plugin for IKPlugin {
-    fn build(&self, app: &mut App) {
+    fn build(&self, _app: &mut App) {
 
     }
 }
@@ -68,8 +66,9 @@ impl CyclicIKSolver {
                 let target_projected = project_onto_plane(&local_target.translation.vector, joint_axis);
                 let end_projected = project_onto_plane(&local_end.translation.vector, joint_axis);
                 //the angle between the projected vectors is the joint's position (limited by joint limits)
+                let angle = angle_between(&end_projected, &target_projected, joint_axis);
                 curr_joint.set_position_clamped(
-                    end_projected.angle(&target_projected)
+                    angle
                 );
             }
             

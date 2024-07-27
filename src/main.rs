@@ -8,16 +8,15 @@ mod node;
 mod iterator;
 
 use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
-use bevy_rapier3d::na::{Isometry3, SimdValue, UnitVector3, Vector, Vector3};
+use bevy_rapier3d::na::{Isometry3, Vector3};
 use bevy_rapier3d::plugin::RapierPhysicsPlugin;
 use bevy_rapier3d::prelude::{Collider, RigidBody};
 use bevy_rapier3d::render::RapierDebugRenderPlugin;
-use bevy::math::{Vec3, VectorSpace};
+use bevy::math::Vec3;
 use bevy::prelude::*;
 use chain::SerialKChain;
 use ik::CyclicIKSolver;
 use k::connect;
-use math_utils::project_onto_plane;
 use node::{KJointType, KNodeBuilder};
 
 fn main() {
