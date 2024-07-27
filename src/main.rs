@@ -87,17 +87,21 @@ pub fn update(
     targ_transform.translation += Vec3::new(x_movement, y_movement, z_movement) * time.delta_seconds();
 
     let base = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+        .build();
+    let n1 = KNodeBuilder::new()
         .joint_type(KJointType::Revolute { axis: Vector3::y_axis() })
         .build();
-    let mut previous = base.clone();
-    for _ in 0..5 {
-        let new_joint = KNodeBuilder::new()
-            .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
-            .translation(Vector3::new(0., -1., 0.).into())
-            .build();
-        connect![previous => new_joint];
-        previous = new_joint.clone();
-    }
+    let n2 = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::z_axis() })
+        .build();
+    let n3 = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+        .translation(Vector3::new(0., -1., 0.).into())
+        .build();
+
+    chain_nodes![base => n1 => n2 => n3];
+    
 
     let mut chain = SerialKChain::from_root(&base);
     let solver = CyclicIKSolver {
