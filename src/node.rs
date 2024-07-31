@@ -1,6 +1,7 @@
-use std::{cell::RefCell, ops::{Deref, DerefMut}, rc::{Rc, Weak}};
+use std::{ops::{Deref, DerefMut}, sync::{Arc, Weak}};
 
 use derivative::Derivative;
+use parking_lot::{Mutex, MutexGuard, RawMutex};
 use thiserror::Error;
 use bevy_rapier3d::{math::Real, na::{Isometry3, Translation3, UnitQuaternion, UnitVector3}};
 
@@ -8,18 +9,18 @@ use crate::iterator::KNodeChildren;
 
 #[derive(Default)]
 pub struct KNodeData {
-    pub parent: Option<Weak<RefCell<KNodeData>>>,
+    pub parent: Option<Weak<Mutex<KNodeData>>>,
     pub child: Option<KNode>,
     pub(crate) joint: KJoint,
 }
 
 #[derive(Clone)]
-pub struct KNode(pub(crate) Rc<RefCell<KNodeData>>);
+pub struct KNode(pub(crate) Arc<Mutex<KNodeData>>);
 
 impl KNode {
     pub fn set_parent(&self, parent: &KNode) {
-        (*self.0).borrow_mut().parent = Some(Rc::downgrade(&parent.0));
-        (*parent.0).borrow_mut().child = Some(self.clone());
+        self.0.lock().parent = Some(Arc::downgrade(&parent.0));
+        parent.0.lock().child = Some(self.clone());
     }
 
     pub fn iter_children(&self) -> KNodeChildren {
@@ -28,12 +29,8 @@ impl KNode {
 
     pub fn joint(&self) -> KJointRef {
         KJointRef {
-            node_ref: (*self.0).borrow()
+            guard: self.0.lock()
         }
-    }
-
-    pub fn joint_mut(&self) -> KJointRefMut {
-        KJointRefMut { node_ref: (*self.0).borrow_mut() }
     }
 
     pub fn joint_position(&self) -> Real {
@@ -42,30 +39,19 @@ impl KNode {
 }
 
 pub struct KJointRef<'a> {
-    node_ref: std::cell::Ref<'a, KNodeData>
+    guard: MutexGuard<'a, KNodeData>
 }
 
 impl<'a> Deref for KJointRef<'a> {
     type Target = KJoint;
     fn deref(&self) -> &Self::Target {
-        &self.node_ref.joint
+        &self.guard.joint
     }
 }
 
-pub struct KJointRefMut<'a> {
-    node_ref: std::cell::RefMut<'a, KNodeData>
-}
-
-impl<'a> Deref for KJointRefMut<'a> {
-    type Target = KJoint;
-    fn deref(&self) -> &Self::Target {
-        &self.node_ref.joint
-    }
-}
-
-impl<'a> DerefMut for KJointRefMut<'a> {
+impl<'a> DerefMut for KJointRef<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.node_ref.joint
+        &mut self.guard.joint
     }
 }
 
@@ -109,7 +95,7 @@ impl KNodeBuilder {
     }
 
     pub fn build(self) -> KNode {
-        KNode(Rc::new(RefCell::new(self.0)))
+        KNode(Arc::new(Mutex::new(self.0)))
     }
 }
 

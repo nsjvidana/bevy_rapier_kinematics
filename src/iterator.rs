@@ -16,7 +16,7 @@ impl Iterator for KNodeChildren {
     type Item = KNode;
     
     fn next(&mut self) -> Option<Self::Item> {
-        let child_opt = self.curr_node.0.borrow().child.clone();
+        let child_opt = self.curr_node.0.lock().child.clone();
         match child_opt {
             Some(child) => {
                 self.curr_node = child.clone();

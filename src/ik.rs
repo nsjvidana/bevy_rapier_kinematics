@@ -29,7 +29,7 @@ impl CyclicIKSolver {
             let mut end_world_space = None;
             
             for (i, node) in chain.iter().enumerate().rev() {
-                let mut curr_joint = node.joint_mut();
+                let mut curr_joint = node.joint();
                 let joint_axis = match curr_joint.joint_type() {
                     KJointType::Revolute { axis } => axis,
                     KJointType::Fixed => continue,

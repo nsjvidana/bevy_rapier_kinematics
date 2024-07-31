@@ -114,7 +114,7 @@ pub fn update(
     let solver = CyclicIKSolver {
         allowable_target_distance: 0.1,
         allowable_target_angle: 1f32.to_radians(),
-        max_iterations: 2
+        max_iterations: 1
     };
     let solver_result = solver.solve(&mut chain, Isometry3 {
         rotation: targ_transform.rotation.into(),

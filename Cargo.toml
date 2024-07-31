@@ -13,6 +13,7 @@ rand = "0.8.5"
 bevy_rapier3d = "0.27.0"
 thiserror = "1.0.63"
 derivative = "2.2.0"
+parking_lot = "0.12.3"
 
 [profile.dev.package."*"]
 opt-level = 3

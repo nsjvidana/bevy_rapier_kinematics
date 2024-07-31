@@ -2,7 +2,7 @@ use std::slice::Iter;
 
 use bevy_rapier3d::na::Isometry3;
 
-use crate::node::{KJointRef, KJointRefMut, KNode};
+use crate::node::{KJointRef, KNode};
 
 #[derive(Default)]
 pub struct SerialKChain {
@@ -25,10 +25,6 @@ impl SerialKChain {
         self.nodes.iter().map(|n| n.joint())
     }
 
-    pub fn iter_joints_mut(&mut self) -> impl Iterator<Item = KJointRefMut<'_>> {
-        self.nodes.iter_mut().map(|n| n.joint_mut())
-    }
-
     pub fn iter(&self) -> Iter<KNode> {
         self.nodes.iter()
     }
@@ -39,7 +35,7 @@ impl SerialKChain {
 
     pub fn update_world_transforms(&mut self) {
         for (i, node) in self.iter().enumerate() {
-            let mut curr_joint = node.joint_mut();
+            let mut curr_joint = node.joint();
 
             let mut transform = Isometry3::identity();
             for joint in self.iter_joints().take(i) {
