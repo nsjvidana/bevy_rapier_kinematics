@@ -1025,6 +1025,7 @@ dependencies = [
  "bevy",
  "bevy-inspector-egui",
  "bevy-trait-query",
+ "bevy_egui",
  "bevy_flycam",
  "bevy_rapier3d",
  "derivative",

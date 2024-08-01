@@ -7,6 +7,7 @@ mod chain;
 mod node;
 mod iterator;
 
+use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
 use bevy_rapier3d::na::{Isometry3, Vector3};
 use bevy_rapier3d::plugin::RapierPhysicsPlugin;
@@ -15,8 +16,8 @@ use bevy_rapier3d::render::RapierDebugRenderPlugin;
 use bevy::math::Vec3;
 use bevy::prelude::*;
 use chain::SerialKChain;
+use derivative::Derivative;
 use ik::CyclicIKSolver;
-use k::connect;
 use node::{KJointType, KNodeBuilder};
 
 fn main() {
@@ -25,6 +26,7 @@ fn main() {
         DefaultPlugins,
         RapierPhysicsPlugin::<()>::default(),
         RapierDebugRenderPlugin::default(),
+        EguiPlugin
     ))
         .add_systems(Startup, startup)
         .add_systems(Update, update);
@@ -73,12 +75,32 @@ pub fn startup(
 #[derive(Component)]
 pub struct TestObject;
 
+#[derive(Derivative)]
+#[derivative(Default)]
+pub struct UiState {
+    pub step: bool,
+    #[derivative(Default(value="true"))]
+    pub stepping_mode_enabled: bool,
+    pub reset: bool,
+    pub damping: f32,
+    pub max_iterations: usize,
+}
+
 pub fn update(
     mut gizmos: Gizmos,
     keys: Res<ButtonInput<KeyCode>>,
     mut target_q: Query<&mut Transform, With<TestObject>>,
     time: Res<Time>,
+    mut ctxs: EguiContexts,
+    mut ui_state: Local<UiState>
 ) {
+    egui::Window::new("Cyclic IK Solver Menu").show(ctxs.ctx_mut(), |ui| {
+        ui_state.step = ui.button("Step").clicked();
+        ui.checkbox(&mut ui_state.stepping_mode_enabled, "Enable Stepping");
+        ui_state.reset = ui.button("Reset").clicked();
+        ui.add(egui::Slider::new(&mut ui_state.damping, 0.0..=1.0).text("Damping"));
+        ui.add(egui::Slider::new(&mut ui_state.max_iterations, 0..=10).text("Max iterations"));
+    });
     let mut targ_transform = target_q.get_single_mut().ok().unwrap();
 
     let x_movement = (keys.pressed(KeyCode::ArrowRight) as i8 - keys.pressed(KeyCode::ArrowLeft) as i8) as f32;
@@ -125,6 +147,8 @@ pub fn update(
     let mut prev = Vec3::ZERO;
     for joint in chain.iter_joints() {
         let joint_pos: Vec3 = joint.world_transform().unwrap().translation.into();
+        let joint_rot: Quat = joint.world_transform().unwrap().rotation.into();
+        
         gizmos.sphere(
             joint_pos,
             default(),
