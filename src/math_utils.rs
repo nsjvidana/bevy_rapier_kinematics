@@ -37,7 +37,7 @@ pub fn project_onto_plane(vector: &Vector3<Real>, plane_normal: &UnitVector3<Rea
     )
 }
 
-/// Computes the angle from vector `a` to vector `b` that lie on the same plane
+/// Computes the shortest angle from vector `a` to vector `b` that lie on the same plane
 /// that has a normal `n`.
 /// 
 /// The angle that is returned comes with the appropriate sign for a right-handed rotation

@@ -108,30 +108,8 @@ pub fn update(
     let z_movement = (keys.pressed(KeyCode::ArrowDown) as i8 - keys.pressed(KeyCode::ArrowUp) as i8) as f32;
     targ_transform.translation += Vec3::new(x_movement, y_movement, z_movement) * time.delta_seconds();
 
-    let base = KNodeBuilder::new()
-        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
-        .build();
-    let n1 = KNodeBuilder::new()
-        .joint_type(KJointType::Revolute { axis: Vector3::y_axis() })
-        .build();
-    let n2 = KNodeBuilder::new()
-        .joint_type(KJointType::Revolute { axis: Vector3::z_axis() })
-        .build();
-    let n3 = KNodeBuilder::new()
-        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
-        .translation(Vector3::new(0., -1., 0.).into())
-        .build();
-    let n4 = KNodeBuilder::new()
-        .joint_type(KJointType::Revolute { axis: Vector3::z_axis() })
-        .build();
-    let end = KNodeBuilder::new()
-        .joint_type(KJointType::Fixed)
-        .translation(Vector3::new(0., -1., 0.).into())
-        .build();
-
-    chain_nodes![base => n1 => n2 => n3 => n4 => end];
-
-    let mut chain = SerialKChain::from_root(&base);
+    
+    let mut chain = create_test_chain();
     let solver = CyclicIKSolver {
         allowable_target_distance: 0.1,
         allowable_target_angle: 1f32.to_radians(),
@@ -160,4 +138,31 @@ pub fn update(
     if solver_result.is_err() {
         println!("{}", solver_result.err().unwrap());
     }
+}
+
+fn create_test_chain() -> SerialKChain {
+    let base = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+        .build();
+    let n1 = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::y_axis() })
+        .build();
+    let n2 = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::z_axis() })
+        .build();
+    let n3 = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+        .translation(Vector3::new(0., -1., 0.).into())
+        .build();
+    let n4 = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::z_axis() })
+        .build();
+    let end = KNodeBuilder::new()
+        .joint_type(KJointType::Fixed)
+        .translation(Vector3::new(0., -1., 0.).into())
+        .build();
+
+    chain_nodes![base => n1 => n2 => n3 => n4 => end];
+
+    SerialKChain::from_root(&base)
 }
