@@ -124,13 +124,12 @@ pub fn update(
     let n4 = KNodeBuilder::new()
         .joint_type(KJointType::Revolute { axis: Vector3::z_axis() })
         .build();
-    let n5 = KNodeBuilder::new()
-        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+    let end = KNodeBuilder::new()
+        .joint_type(KJointType::Fixed)
         .translation(Vector3::new(0., -1., 0.).into())
         .build();
 
-    chain_nodes![base => n1 => n2 => n3 => n4 => n5];
-    
+    chain_nodes![base => n1 => n2 => n3 => n4 => end];
 
     let mut chain = SerialKChain::from_root(&base);
     let solver = CyclicIKSolver {
@@ -147,7 +146,6 @@ pub fn update(
     let mut prev = Vec3::ZERO;
     for joint in chain.iter_joints() {
         let joint_pos: Vec3 = joint.world_transform().unwrap().translation.into();
-        let joint_rot: Quat = joint.world_transform().unwrap().rotation.into();
         
         gizmos.sphere(
             joint_pos,

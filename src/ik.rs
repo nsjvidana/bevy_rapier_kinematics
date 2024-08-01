@@ -30,16 +30,7 @@ impl CyclicIKSolver {
             
             for (i, node) in chain.iter().enumerate().rev() {
                 let mut curr_joint = node.joint();
-                let joint_axis = match curr_joint.joint_type() {
-                    KJointType::Revolute { axis } => axis,
-                    KJointType::Fixed => continue,
-                    _ => return Err(KError::SolverIncompatibleWithJointType {
-                        joint_name: curr_joint.name.clone(),
-                        joint_type: format!("{:?}", curr_joint.joint_type()),
-                        solver_type: "Cyclic".into()
-                    })
-                };
-
+                
                 let joint_space = {
                     let mut transform = Isometry3::identity();
                     for node in chain.iter().take(i) {
@@ -53,6 +44,16 @@ impl CyclicIKSolver {
                 if i == chain.len()-1 {
                     end_world_space = Some(joint_space);
                 }
+
+                let joint_axis = match curr_joint.joint_type() {
+                    KJointType::Revolute { axis } => axis,
+                    KJointType::Fixed => continue,
+                    _ => return Err(KError::SolverIncompatibleWithJointType {
+                        joint_name: curr_joint.name.clone(),
+                        joint_type: format!("{:?}", curr_joint.joint_type()),
+                        solver_type: "Cyclic".into()
+                    })
+                };
 
                 let local_target = joint_space.inverse() * target_pose;
                 let local_end = {

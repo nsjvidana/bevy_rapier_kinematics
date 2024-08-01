@@ -178,7 +178,7 @@ impl KJoint {
     pub fn local_transform(&self) -> Isometry3<Real> {
         match self.joint_type {
             KJointType::Fixed => 
-                Isometry3::identity(),
+                self.origin,
             KJointType::Linear { axis } => 
                 self.origin * Translation3::from(axis.into_inner() * self.position),
             KJointType::Revolute { axis } => 
