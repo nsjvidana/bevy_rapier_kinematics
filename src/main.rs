@@ -141,28 +141,24 @@ pub fn update(
 }
 
 fn create_test_chain() -> SerialKChain {
+
     let base = KNodeBuilder::new()
-        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
-        .build();
-    let n1 = KNodeBuilder::new()
         .joint_type(KJointType::Revolute { axis: Vector3::y_axis() })
         .build();
-    let n2 = KNodeBuilder::new()
-        .joint_type(KJointType::Revolute { axis: Vector3::z_axis() })
-        .build();
-    let n3 = KNodeBuilder::new()
+    let n1 = KNodeBuilder::new()
         .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
-        .translation(Vector3::new(0., -1., 0.).into())
         .build();
-    let n4 = KNodeBuilder::new()
-        .joint_type(KJointType::Revolute { axis: Vector3::z_axis() })
-        .build();
-    let end = KNodeBuilder::new()
-        .joint_type(KJointType::Fixed)
-        .translation(Vector3::new(0., -1., 0.).into())
-        .build();
+    chain_nodes![base => n1];
 
-    chain_nodes![base => n1 => n2 => n3 => n4 => end];
+    let mut prev = n1.clone();
+    for _ in 0..10 {
+        let node = KNodeBuilder::new()
+            .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+            .translation(Vector3::new(0., 0.2, 0.).into())
+            .build();
+        chain_nodes![prev => node];
+        prev = node;
+    }
 
     SerialKChain::from_root(&base)
 }
