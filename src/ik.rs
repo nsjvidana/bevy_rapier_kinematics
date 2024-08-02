@@ -15,7 +15,9 @@ impl Plugin for IKPlugin {
 pub struct CyclicIKSolver {
     pub allowable_target_distance: Real,
     pub allowable_target_angle: Real,
-    pub max_iterations: usize
+    pub max_iterations: usize,
+    /// 0.0 for no damping, 1.0 for damping
+    pub per_joint_dampening: f32
 }
 
 impl CyclicIKSolver {
@@ -69,7 +71,7 @@ impl CyclicIKSolver {
                 //the angle between the projected vectors is the joint's position (limited by joint limits)
                 let angle = angle_between(&end_projected, &target_projected, joint_axis);
                 curr_joint.set_position_clamped(
-                    angle
+                    angle * (1.-self.per_joint_dampening)
                 );
             }
             
