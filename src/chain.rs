@@ -29,6 +29,10 @@ impl SerialKChain {
         self.nodes.iter()
     }
 
+    pub fn get_node(&self, idx: usize) -> Option<&KNode> {
+        self.nodes.get(idx)
+    }
+
     pub fn len(&self) -> usize {
         self.nodes.len()
     }

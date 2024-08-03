@@ -7,11 +7,11 @@ use bevy_rapier3d::{math::Real, na::{Isometry3, Translation3, UnitQuaternion, Un
 
 use crate::iterator::KNodeChildren;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct KNodeData {
     pub parent: Option<Weak<Mutex<KNodeData>>>,
     pub child: Option<KNode>,
-    pub(crate) joint: KJoint,
+    pub joint: KJoint,
 }
 
 #[derive(Clone)]
@@ -99,7 +99,7 @@ impl KNodeBuilder {
     }
 }
 
-#[derive(Derivative)]
+#[derive(Derivative, Clone)]
 #[derivative(Default)]
 pub struct KJoint {
     pub name: String,
@@ -152,11 +152,21 @@ impl KJoint {
         self
     }
 
+    pub fn increment_position(&mut self, increment: Real) -> &mut Self {
+        self.set_position_clamped(self.position + increment);
+        self
+    }
+
     #[inline]
     pub fn set_origin(&mut self, origin: Isometry3<Real>) -> &mut Self {
         self.origin = origin;
         self.clear_cache();
         self
+    }
+
+    #[inline]
+    pub fn origin(&self) -> &Isometry3<Real> {
+        &self.origin
     }
 
     pub fn new(joint_type: KJointType) -> Self {
@@ -191,7 +201,7 @@ impl KJoint {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub enum KJointType {
     #[default]
     Fixed,
