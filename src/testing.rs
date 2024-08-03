@@ -6,7 +6,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::{dynamics::{MultibodyJoint, RevoluteJointBuilder, RigidBody, Sleeping, SphericalJointBuilder}, geometry::Collider, math::Real, na::Isometry3, plugin::{PhysicsSet, RapierContext, RapierPhysicsPlugin}, render::{DebugRenderMode, RapierDebugRenderPlugin}};
 use k::{InverseKinematicsSolver, SerialChain};
 
-use crate::{math_utils::{project_onto_plane_k, vec3_y}, physics::{toggle_contacts_with, ToggleContactsWith}};
+use crate::{math_utils::vec3_y, physics::{toggle_contacts_with, ToggleContactsWith}};
 
 pub fn thing(
     mut commands: Commands
@@ -224,63 +224,5 @@ pub fn test() {
     movement_settings.speed = 3.;
 
     app.run();
-}
-
-pub struct CyclicThing<T: k::RealField + k::SubsetOf<f64>> {
-    pub allowable_target_distance: T,
-    pub num_max_tries: usize
-}
-
-impl<T> InverseKinematicsSolver<T> for CyclicThing<T>
-where
-    T: k::RealField + k::SubsetOf<f64>
-{
-    fn solve(&self, arm: &k::SerialChain<T>, target_pose: &k::Isometry3<T>) -> Result<(), k::Error> {
-        use k::*;
-
-        for (i, node) in arm.iter().enumerate() {
-            let joint_type = &node.joint().joint_type;
-            let joint_axis = match joint_type {
-                JointType::Rotational { axis } => axis,
-                JointType::Fixed => continue,
-                _ => panic!("Cyclic solvers dont work with linear joints!")
-            };
-
-            let joint_space = {
-                let mut transform = Isometry3::identity();
-                for node in arm.iter().take(i+1) {
-                    transform *= node.joint().local_transform();
-                }
-                transform
-            };
-            
-            let local_target = joint_space.inverse() * target_pose;
-            let local_end = {
-                let mut transform = Isometry3::identity();
-                for node in arm.iter().skip(i+1) {
-                    transform *= node.joint().local_transform();
-                }
-                transform
-            };
-            
-            let target_projected = project_onto_plane_k(&local_target.translation.vector, joint_axis);
-            let end_projected = project_onto_plane_k(&local_end.translation.vector, joint_axis);
-            node.set_joint_position_clamped(
-                //get angle between the projected vectors
-                T::acos(end_projected.dot(&target_projected) / (end_projected.norm() * target_projected.norm()))
-            );
-        }
-
-        return Ok(());
-    }
-
-    fn solve_with_constraints(
-            &self,
-            _arm: &k::SerialChain<T>,
-            _target_pose: &k::Isometry3<T>,
-            _constraints: &k::Constraints,
-        ) -> Result<(), k::Error> {
-        todo!()
-    }
 }
 

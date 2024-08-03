@@ -6,25 +6,6 @@ use bevy_rapier3d::rapier::utils::SimdBasis;
 
 pub const FRAC_PI_12: f32 = PI/12.;
 
-pub trait Conversion<A, B> {
-    fn from(self, value: A) -> B;
-    fn into(self, value: B) -> A;
-}
-
-
-
-#[inline]
-pub fn project_onto_plane_k<T: k::RealField>(vector: &k::Vector3<T>, plane_normal: &k::nalgebra::UnitVector3<T>) -> k::Vector3<T> {
-    let normsq = plane_normal.norm_squared();
-    let dot = vector.dot(plane_normal);
-    let div = dot / normsq;
-    k::Vector3::<T>::new(
-        vector.x.clone() - plane_normal.x.clone() * div.clone(),
-        vector.y.clone() - plane_normal.y.clone() * div.clone(),
-        vector.z.clone() - plane_normal.z.clone() * div
-    )
-}
-
 #[inline]
 pub fn project_onto_plane(vector: &Vector3<Real>, plane_normal: &UnitVector3<Real>) -> Vector3<Real> {
     let normsq = plane_normal.norm_squared();
