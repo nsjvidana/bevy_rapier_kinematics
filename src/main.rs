@@ -1,189 +1,165 @@
 mod math_utils;
+mod ik;
+mod arm;
+mod physics;
+mod testing;
+mod chain;
+mod node;
+mod iterator;
 
-use std::f32::consts::{FRAC_PI_2, PI};
-pub use bevy_rapier3d::na as nalgebra;
-
-use crate::math_utils::{FRAC_PI_12, get_rot_axes, rotation_from_fwd, vec3_y};
+use bevy_egui::{egui, EguiContexts, EguiPlugin};
+use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
+use bevy_rapier3d::na::{Isometry3, Vector3};
+use bevy_rapier3d::plugin::RapierPhysicsPlugin;
+use bevy_rapier3d::prelude::{Collider, RigidBody};
+use bevy_rapier3d::render::RapierDebugRenderPlugin;
+use bevy::math::Vec3;
 use bevy::prelude::*;
-use bevy_flycam::{FlyCam, NoCameraPlayerPlugin};
-use bevy_rapier3d::plugin::{RapierContext, RapierPhysicsPlugin};
-use bevy_rapier3d::prelude::{Collider, FixedJoint, GenericJointBuilder, ImpulseJoint, JointAxis, RapierMultibodyJointHandle, RigidBody, Sleeping, SphericalJointBuilder};
-use bevy_rapier3d::render::{DebugRenderMode, RapierDebugRenderPlugin};
-use std::ops::Mul;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
-use bevy_rapier3d::dynamics::{JointAxesMask, MultibodyJoint};
-use bevy_rapier3d::na::{Matrix4, UnitQuaternion};
-use bevy_rapier3d::parry::math::UnitVector;
-use bevy_rapier3d::rapier::utils::SimdBasis;
-use crate::nalgebra::{Isometry, Matrix3, Rotation3, Translation, UnitVector3, Vector, Vector3};
+use chain::SerialKChain;
+use derivative::Derivative;
+use ik::CyclicIKSolver;
+use node::{KJointType, KNodeBuilder};
 
 fn main() {
     let mut app = App::new();
     app.add_plugins((
-            DefaultPlugins,
-            NoCameraPlayerPlugin,
-            RapierPhysicsPlugin::<()>::default(),
-            RapierDebugRenderPlugin {
-                style: default(),
-                mode: {
-                    let mut mode = DebugRenderMode::default();
-                    mode.set(DebugRenderMode::JOINTS, true);
-                    mode
-                },
-                enabled: true,
-            },
-            WorldInspectorPlugin::default()
-        ))
-        .add_systems(Startup, test_startup)
-        .add_systems(Update, test_update);
+        DefaultPlugins,
+        RapierPhysicsPlugin::<()>::default(),
+        RapierDebugRenderPlugin::default(),
+        EguiPlugin
+    ))
+        .add_systems(Startup, startup)
+        .add_systems(Update, update);
 
-    let mut movement_settings = app.world.get_resource_mut::<bevy_flycam::MovementSettings>().unwrap();
-    movement_settings.speed = 3.;
-
+    //flycam stuff
+    app.add_plugins(NoCameraPlayerPlugin);
+    app.world_mut().resource_mut::<MovementSettings>()
+        .speed = 2.5;
 
     app.run();
 }
 
-fn test_startup (
+pub fn startup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<StandardMaterial>>
 ) {
     //camera
     commands.spawn((
         Camera3dBundle {
-            transform: Transform::from_xyz(0., 0., 5.)
-                .looking_at(Vec3::NEG_Z, Vec3::Y),
+            transform: Transform::from_xyz(0., 2., 2.)
+                .looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         },
-        FlyCam
+        FlyCam,
+        Collider::ball(0.1)
     ));
-
-    //spawn ground
+    //ground
     commands.spawn((
         RigidBody::Fixed,
         Collider::cuboid(10., 0.1, 10.),
+        Transform::from_xyz(0., -5., 0.),
+    ));
+
+    //test object
+    commands.spawn((
         PbrBundle {
-            mesh: meshes.add(bevy::prelude::Cuboid {
-                half_size: Vec3::new(10., 0.1, 10.),
-            }),
-            material: materials.add(Color::rgb(0.95, 0.95, 0.95)),
-            transform: Transform::from_xyz(0., -1., 0.),
+            mesh: meshes.add(Sphere::new(0.1)),
+            material: materials.add(Color::linear_rgb(1., 0., 0.)),
             ..default()
         },
+        TestObject,
     ));
-
-    let radius = 0.05;
-
-    let segment_shape = Capsule3d {
-        half_length: 0.3 - radius,
-        radius,
-    };
-    let torso_shape = Capsule3d {
-        half_length: 0.5 - radius,
-        radius,
-    };
-    let segment_mesh = meshes.add(segment_shape);
-    let torso_mesh = meshes.add(torso_shape);
-
-    let material = materials.add(Color::rgb(1., 0., 0.));
-    let torso_cmd = commands.spawn((
-        RigidBody::Fixed,
-        PbrBundle {
-            mesh: torso_mesh,
-            material,
-            transform: Transform::default(),
-            ..default()
-        },
-        Collider::capsule_y(torso_shape.half_length, torso_shape.radius),
-        bevy::core::Name::new("Torso"),
-    ));
-    let torso = torso_cmd.id();
-
-    let fwd = UnitVector3::new_normalize(Vector3::new(1., 1., 1.));
-    let rot = rotation_from_fwd(&fwd);
-
-    //TODO: use generic joint for more freedom over joint control
-    let r_shoulder_builder = GenericJointBuilder::new(JointAxesMask::LOCKED_SPHERICAL_AXES)
-        .local_anchor1(vec3_y(torso_shape.half_length + torso_shape.radius))
-        .local_anchor2(vec3_y(segment_shape.half_length + segment_shape.radius))
-        .local_basis1(rot.into())
-        .set_motor(JointAxis::AngX, 0., 0.01_f32.to_radians(), 1., 0.01)
-        .set_motor(JointAxis::AngY, 0., 0.01_f32.to_radians(), 1., 0.01)
-        .set_motor(JointAxis::AngZ, 0., 0.01_f32.to_radians(), 1., 0.01);
-    let mut r_shoulder = MultibodyJoint::new(torso, r_shoulder_builder);
-    r_shoulder.data.set_contacts_enabled(false);
-    let r_upper_cmd = commands.spawn((
-        RigidBody::Dynamic,
-        Collider::capsule_y(segment_shape.half_length, segment_shape.radius),
-        Transform::default(),
-        r_shoulder,
-        bevy::core::Name::new("Upper"),
-        Sleeping::disabled()
-    ));
-    let r_upper = r_upper_cmd.id();
 }
 
-fn test_update(
-    rapier_context: Res<RapierContext>,
+#[derive(Component)]
+pub struct TestObject;
+
+#[derive(Derivative)]
+#[derivative(Default)]
+pub struct UiState {
+    pub step: bool,
+    #[derivative(Default(value="true"))]
+    pub stepping_mode_enabled: bool,
+    pub reset: bool,
+    pub damping: f32,
+    pub max_iterations: usize,
+}
+
+pub fn update(
     mut gizmos: Gizmos,
-    mut joint_q: Query<(&RapierMultibodyJointHandle, &mut MultibodyJoint)>,
-    cam_q: Query<&Transform, With<FlyCam>>
+    keys: Res<ButtonInput<KeyCode>>,
+    mut target_q: Query<&mut Transform, With<TestObject>>,
+    time: Res<Time>,
+    mut ctxs: EguiContexts,
+    mut ui_state: Local<UiState>
 ) {
-    let op = cam_q.get_single();
-    if op.is_err() { return; }
-    let cam_pos = Vector3::<f32>::from(op.unwrap().translation);
+    egui::Window::new("Cyclic IK Solver Menu").show(ctxs.ctx_mut(), |ui| {
+        ui_state.step = ui.button("Step").clicked();
+        ui.checkbox(&mut ui_state.stepping_mode_enabled, "Enable Stepping");
+        ui_state.reset = ui.button("Reset").clicked();
+        ui.add(egui::Slider::new(&mut ui_state.damping, 0.0..=1.0).text("Damping"));
+        ui.add(egui::Slider::new(&mut ui_state.max_iterations, 0..=10).text("Max iterations"));
+    });
+    let mut targ_transform = target_q.get_single_mut().ok().unwrap();
 
-    let multibodies= &rapier_context.multibody_joints;
-    for (mb_handle, mut joint_cmp) in joint_q.iter_mut() {
-        let mb = multibodies.get(mb_handle.0).unwrap();
-        if mb.0.num_links() == 0 { continue; }
-        let mut link = mb.0.link(0).unwrap();
-        let mut found_link = false;
-        for l in mb.0.links() {
-            if l.joint.data.as_spherical().is_some() {
-                link = l;
-                found_link = true;
-                break;
-            }
-        }
-        if !found_link { continue; }
+    let x_movement = (keys.pressed(KeyCode::ArrowRight) as i8 - keys.pressed(KeyCode::ArrowLeft) as i8) as f32;
+    let y_movement = (keys.pressed(KeyCode::KeyU) as i8 - keys.pressed(KeyCode::KeyJ) as i8) as f32;
+    let z_movement = (keys.pressed(KeyCode::ArrowDown) as i8 - keys.pressed(KeyCode::ArrowUp) as i8) as f32;
+    targ_transform.translation += Vec3::new(x_movement, y_movement, z_movement) * time.delta_seconds();
 
-        let pos = link.local_to_world().translation.vector;
-        let rapier_joint = &link.joint.data;
-        let joint_pos = link.local_to_world().rotation.mul(rapier_joint.local_frame2.translation.vector) + pos;
+    
+    let mut chain = create_test_chain();
+    let solver = CyclicIKSolver {
+        allowable_target_distance: 0.1,
+        allowable_target_angle: 1f32.to_radians(),
+        max_iterations: 8,
+        per_joint_dampening: 0.40
+    };
+    let solver_result = solver.solve(&mut chain, Isometry3 {
+        rotation: targ_transform.rotation.into(),
+        translation: targ_transform.translation.into(),
+    });
+    chain.update_world_transforms();
 
-
-        let fwd = UnitVector3::new_normalize(cam_pos - joint_pos);
-        let (r, u, f) = get_rot_axes(&UnitQuaternion::face_towards(&fwd, &Vector::y()));
-        let rot_mat = Rotation3::from_matrix_unchecked(
-            Matrix3::from_columns(&[
-                r.into_inner(),
-                -f.into_inner(),
-                u.into_inner()
-            ])
+    let mut prev = Vec3::ZERO;
+    for joint in chain.iter_joints() {
+        let joint_pos: Vec3 = joint.world_transform().unwrap().translation.into();
+        
+        gizmos.sphere(
+            joint_pos,
+            default(),
+            0.05,
+            Color::linear_rgb(0., 1., 0.)
         );
-        let rot = UnitQuaternion::from_rotation_matrix(&rot_mat);
-
-        let par_rot = link.local_to_world().rotation * link.local_to_parent().rotation.inverse();
-
-        joint_cmp.data.set_local_basis1((par_rot.inverse() * rot).into());
-
-        gizmos.ray(
-            joint_pos.into(),
-            joint_cmp.data.local_basis1().mul_vec3(Vec3::X),
-            Color::RED
-        );
-        gizmos.ray(
-            joint_pos.into(),
-            joint_cmp.data.local_basis1().mul_vec3(Vec3::Y),
-            Color::GREEN
-        );
-        gizmos.ray(
-            joint_pos.into(),
-            joint_cmp.data.local_basis1().mul_vec3(Vec3::Z),
-            Color::CYAN
-        );
-
+        gizmos.line(prev, joint_pos, Color::linear_rgb(0., 0., 1.));
+        prev = joint_pos;
     }
+
+    if solver_result.is_err() {
+        println!("{}", solver_result.err().unwrap());
+    }
+}
+
+fn create_test_chain() -> SerialKChain {
+
+    let base = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::y_axis() })
+        .build();
+    let n1 = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+        .build();
+    chain_nodes![base => n1];
+
+    let mut prev = n1.clone();
+    for _ in 0..10 {
+        let node = KNodeBuilder::new()
+            .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+            .translation(Vector3::new(0., 0.2, 0.).into())
+            .build();
+        chain_nodes![prev => node];
+        prev = node;
+    }
+
+    SerialKChain::from_root(&base)
 }
