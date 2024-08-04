@@ -1,6 +1,6 @@
 use std::{cell::RefCell, sync::Arc};
 
-use bevy::{prelude::{App, Plugin}, utils::default};
+use bevy::{color::Color, math::Vec3, prelude::{App, Gizmos, Plugin}, utils::default};
 use bevy_rapier3d::{math::Real, na::{Isometry3, Translation3, UnitQuaternion}};
 
 use crate::{chain::SerialKChain, math_utils::{angle_between, project_onto_plane, rotation_between_vectors}, node::{KError, KJointType, KNodeData}};
@@ -95,54 +95,57 @@ impl CyclicIKSolver {
         })
     }
 
-    pub fn backwards_solve(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>) -> Result<(), KError>{
+    pub fn backwards_solve(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>, gizmos: &mut Gizmos) -> Result<(), KError>{
         let mut dist_to_target = 0.;
         let mut angle_to_target = 0.;
 
         let mut inv_chain = Vec::with_capacity(chain.len());
-        {// create root for inv chain at the target pose.
-            let end_joint = chain.get_node(chain.len()-1).unwrap().joint();
-            let end_joint_space = {
-                let mut transform = Isometry3::identity();
-                for joint in chain.iter_joints().take(chain.len()-1) {
-                    transform *= joint.local_transform();
-                }
-                transform * end_joint.local_transform()
-            };
 
-            let local_inv_root_child = end_joint.local_transform();
-            let local_end_joint = target_pose.inv_mul(&end_joint_space);
-
-            let mut inv_root_joint = end_joint.clone();
-            let mut inv_root_rotation = match inv_root_joint.joint_type() {
-                KJointType::Fixed => {
-                    target_pose.rotation * rotation_between_vectors(&local_inv_root_child.translation.vector, &local_end_joint.translation.vector)
-                },
-                KJointType::Revolute { axis } => {
-                    target_pose.rotation * UnitQuaternion::from_axis_angle(
-                        axis,
-                        angle_between(
-                            &project_onto_plane(&local_inv_root_child.translation.vector, axis),
-                            &project_onto_plane(&local_end_joint.translation.vector, axis),
-                            axis
-                        )
-                    )
-                },
-                KJointType::Linear { axis } => todo!()
-            };
-            inv_root_joint.set_origin(Isometry3 {
-                rotation: inv_root_rotation,
-                ..target_pose
-            });
-
-            let inv_root = KNodeData {
-                joint: inv_root_joint,
-                ..Default::default()
-            };
-            inv_chain.push(RefCell::new(inv_root));
-        }
-        
         for _ in 0..self.max_iterations {
+            
+            inv_chain.clear();
+            {// create root for inv chain at the target pose.
+                let end_joint = chain.get_node(chain.len()-1).unwrap().joint();
+                let end_joint_space = {
+                    let mut transform = Isometry3::identity();
+                    for joint in chain.iter_joints().take(chain.len()-1) {
+                        transform *= joint.local_transform();
+                    }
+                    transform * end_joint.local_transform()
+                };
+
+                let local_inv_root_child = end_joint.local_transform();
+                let local_end_joint = target_pose.inv_mul(&end_joint_space);
+
+                let mut inv_root_joint = end_joint.clone();
+                let inv_root_rotation = match inv_root_joint.joint_type() {
+                    KJointType::Fixed => {
+                        rotation_between_vectors(&local_inv_root_child.translation.vector, &local_end_joint.translation.vector)
+                    },
+                    KJointType::Revolute { axis } => {
+                        UnitQuaternion::from_axis_angle(
+                            axis,
+                            angle_between(
+                                &project_onto_plane(&local_inv_root_child.translation.vector, axis),
+                                &project_onto_plane(&local_end_joint.translation.vector, axis),
+                                axis
+                            )
+                        )
+                    },
+                    KJointType::Linear { axis } => todo!()
+                };
+                inv_root_joint.set_origin(Isometry3 {
+                    rotation: inv_root_rotation,
+                    ..target_pose
+                });
+
+                let inv_root = KNodeData {
+                    joint: inv_root_joint,
+                    ..Default::default()
+                };
+                inv_chain.push(RefCell::new(inv_root));
+            }
+        
             for (i, node) in chain.iter().enumerate().rev() {
                 if i == 0 { break; } //if we are at the root, end this iteration.
                 
@@ -198,6 +201,36 @@ impl CyclicIKSolver {
                     //  (probably by projecting locals directly on the axis and comparing their norms)
                     KJointType::Linear { axis } => todo!(),
                     KJointType::Fixed => continue,
+                }
+            }
+
+            {//drawing gizmos
+                for (i, node) in inv_chain.iter().enumerate() {
+                    let curr_joint = &mut node.borrow_mut().joint;
+        
+                    let mut transform = Isometry3::identity();
+                    for joint in inv_chain.iter().take(i) {
+                        transform *= joint.borrow().joint.local_transform();
+                    }
+                    transform *= curr_joint.local_transform();
+        
+                    curr_joint.world_transform_cache = Some(transform);
+                }
+
+                let mut prev = Vec3::ZERO;
+                let color = Color::linear_rgb(0., 1., 0.);
+                for node in inv_chain.iter() {
+                    let joint = &node.borrow().joint;
+                    let joint_pos: Vec3 = joint.world_transform().unwrap().translation.into();
+                    
+                    gizmos.sphere(
+                        joint_pos,
+                        default(),
+                        0.05,
+                        color
+                    );
+                    gizmos.line(prev, joint_pos, color);
+                    prev = joint_pos;
                 }
             }
         }

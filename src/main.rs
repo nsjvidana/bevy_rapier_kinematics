@@ -116,13 +116,18 @@ pub fn update(
         max_iterations: 1,
         per_joint_dampening: 0.
     };
-    let solver_result = solver.backwards_solve(&mut chain, Isometry3 {
-        rotation: targ_transform.rotation.into(),
-        translation: targ_transform.translation.into(),
-    });
+    let solver_result = solver.backwards_solve(
+        &mut chain,
+        Isometry3 {
+            rotation: targ_transform.rotation.into(),
+            translation: targ_transform.translation.into(),
+        },
+        &mut gizmos
+    );
     chain.update_world_transforms();
 
     let mut prev = Vec3::ZERO;
+    let color = Color::linear_rgb(0., 0., 1.);
     for joint in chain.iter_joints() {
         let joint_pos: Vec3 = joint.world_transform().unwrap().translation.into();
         
@@ -130,9 +135,9 @@ pub fn update(
             joint_pos,
             default(),
             0.05,
-            Color::linear_rgb(0., 1., 0.)
+            color
         );
-        gizmos.line(prev, joint_pos, Color::linear_rgb(0., 0., 1.));
+        gizmos.line(prev, joint_pos, color);
         prev = joint_pos;
     }
 
