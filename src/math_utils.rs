@@ -1,7 +1,7 @@
 use std::f32::consts::PI;
 use bevy::math::*;
 use bevy_rapier3d::math::Real;
-use bevy_rapier3d::na::{Matrix3, Rotation3, SimdRealField, UnitQuaternion, UnitVector3, Vector, Vector3};
+use bevy_rapier3d::na::{Matrix3, Quaternion, Rotation3, SimdRealField, UnitQuaternion, UnitVector3, Vector, Vector3, Vector4};
 use bevy_rapier3d::rapier::utils::SimdBasis;
 
 pub const FRAC_PI_12: f32 = PI/12.;
@@ -28,6 +28,31 @@ pub fn angle_between(a: &Vector3<Real>, b: &Vector3<Real>, n: &UnitVector3<Real>
         a.cross(b).dot(n),
         a.dot(b)
     )
+}
+
+/// Computes a quaternion representing the shortest rotation from vector `a` to vector `b`.
+pub fn rotation_between_vectors(a: &Vector3<Real>, b: &Vector3<Real>) -> UnitQuaternion<Real> {
+    // let k_cos_theta = a.dot(b);
+    // let k = Real::sqrt(a.norm_squared() * b.norm_squared());
+    // if k_cos_theta / k == -1. {
+    //     let norm_ortho = a.orthonormal_vector();
+    //     UnitQuaternion::new_unchecked(
+    //         Quaternion::new(0., norm_ortho.x, norm_ortho.y, norm_ortho.z)
+    //     )
+    // }
+    // else {
+    //     let cross = a.cross(b);
+    //     UnitQuaternion::new_normalize(
+    //         Quaternion::new(k_cos_theta + k, cross.x, cross.y, cross.z)
+    //     )
+    // }
+
+    let axis = a.cross(b);
+    let q = Quaternion { coords: Vector4::new(
+        axis.x, axis.y, axis.z,
+        Real::sqrt(a.norm_squared() * b.norm_squared()) + a.dot(b)
+    )};
+    UnitQuaternion::new_normalize(q)
 }
 
 /// Returns a rotation's right, up, and forward vectors from a given forward vector.

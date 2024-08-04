@@ -1,7 +1,9 @@
-use bevy::prelude::{App, Plugin};
-use bevy_rapier3d::{math::Real, na::Isometry3};
+use std::{cell::RefCell, sync::Arc};
 
-use crate::{chain::SerialKChain, math_utils::{angle_between, project_onto_plane}, node::{KError, KJointType}};
+use bevy::{prelude::{App, Plugin}, utils::default};
+use bevy_rapier3d::{math::Real, na::{Isometry3, Translation3, UnitQuaternion}};
+
+use crate::{chain::SerialKChain, math_utils::{angle_between, project_onto_plane, rotation_between_vectors}, node::{KError, KJointType, KNodeData}};
 
 
 pub struct IKPlugin;
@@ -17,7 +19,7 @@ pub struct CyclicIKSolver {
     pub allowable_target_angle: Real,
     pub max_iterations: usize,
     /// 0.0 for no damping, 1.0 for damping
-    pub per_joint_dampening: f32
+    pub per_joint_dampening: Real
 }
 
 impl CyclicIKSolver {
@@ -92,4 +94,120 @@ impl CyclicIKSolver {
             angle_diff: angle_to_target
         })
     }
+
+    pub fn backwards_solve(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>) -> Result<(), KError>{
+        let mut dist_to_target = 0.;
+        let mut angle_to_target = 0.;
+
+        let mut inv_chain = Vec::with_capacity(chain.len());
+        {// create root for inv chain at the target pose.
+            let end_joint = chain.get_node(chain.len()-1).unwrap().joint();
+            let end_joint_space = {
+                let mut transform = Isometry3::identity();
+                for joint in chain.iter_joints().take(chain.len()-1) {
+                    transform *= joint.local_transform();
+                }
+                transform * end_joint.local_transform()
+            };
+
+            let local_inv_root_child = end_joint.local_transform();
+            let local_end_joint = target_pose.inv_mul(&end_joint_space);
+
+            let mut inv_root_joint = end_joint.clone();
+            let mut inv_root_rotation = match inv_root_joint.joint_type() {
+                KJointType::Fixed => {
+                    target_pose.rotation * rotation_between_vectors(&local_inv_root_child.translation.vector, &local_end_joint.translation.vector)
+                },
+                KJointType::Revolute { axis } => {
+                    target_pose.rotation * UnitQuaternion::from_axis_angle(
+                        axis,
+                        angle_between(
+                            &project_onto_plane(&local_inv_root_child.translation.vector, axis),
+                            &project_onto_plane(&local_end_joint.translation.vector, axis),
+                            axis
+                        )
+                    )
+                },
+                KJointType::Linear { axis } => todo!()
+            };
+            inv_root_joint.set_origin(Isometry3 {
+                rotation: inv_root_rotation,
+                ..target_pose
+            });
+
+            let inv_root = KNodeData {
+                joint: inv_root_joint,
+                ..Default::default()
+            };
+            inv_chain.push(RefCell::new(inv_root));
+        }
+        
+        for _ in 0..self.max_iterations {
+            for (i, node) in chain.iter().enumerate().rev() {
+                if i == 0 { break; } //if we are at the root, end this iteration.
+                
+                let mut curr_joint = node.joint();
+                let inv_node_idx = chain.len()-i-1;
+                
+                //attempt to attach a segment to the inverse chain
+                //doing i-1 is safe because we already made sure that the iteration ends when i==0.
+                let mut inv_child_joint = chain.get_node(i-1).unwrap().joint().clone();
+                inv_child_joint.set_origin(curr_joint.local_transform());
+                inv_chain.push(RefCell::new(KNodeData {
+                    joint: inv_child_joint,
+                    ..Default::default()
+                }));
+
+                if let KJointType::Fixed = curr_joint.joint_type() { continue; }
+
+                let mut inv_node = inv_chain.get(inv_node_idx).unwrap().borrow_mut();
+                
+                let inv_node_space = {
+                    let mut transform = Isometry3::identity();
+                    for node in inv_chain.iter().take(inv_node_idx) {
+                        transform *= node.borrow().joint.local_transform();
+                    }
+                    transform * inv_node.joint.local_transform()
+                };
+
+                //TODO: prevent aquiring mutex of the parent node twice.
+                let parent_space = {
+                    let mut transform = Isometry3::identity();
+                    for node in chain.iter().take(i) {
+                        transform *= node.joint().local_transform();
+                    }
+                    transform
+                };
+                let curr_joint_space = parent_space * curr_joint.local_transform();
+                
+
+                let par_local_inv = inv_node_space.inv_mul(&parent_space);
+                let curr_joint_local_inv = inv_node_space.inv_mul(&curr_joint_space);
+                
+                match curr_joint.joint_type() {
+                    KJointType::Revolute { axis } => {
+                        let adjustment = angle_between(
+                            &project_onto_plane(&curr_joint_local_inv.translation.vector, axis),
+                            &project_onto_plane(&par_local_inv.translation.vector, axis),
+                            axis
+                        );
+                        inv_node.joint.increment_position(adjustment);
+                        curr_joint.increment_position(-adjustment);
+                    },
+                    //TODO: implement linear joints
+                    //  (probably by projecting locals directly on the axis and comparing their norms)
+                    KJointType::Linear { axis } => todo!(),
+                    KJointType::Fixed => continue,
+                }
+            }
+        }
+
+        Err(KError::SolverNotConverged {
+            solver_type: "Cyclic".into(),
+            num_tries: self.max_iterations,
+            position_diff: dist_to_target,
+            angle_diff: angle_to_target
+        })
+    }
+
 }

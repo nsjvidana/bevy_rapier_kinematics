@@ -113,10 +113,10 @@ pub fn update(
     let solver = CyclicIKSolver {
         allowable_target_distance: 0.1,
         allowable_target_angle: 1f32.to_radians(),
-        max_iterations: 8,
-        per_joint_dampening: 0.40
+        max_iterations: 1,
+        per_joint_dampening: 0.
     };
-    let solver_result = solver.solve(&mut chain, Isometry3 {
+    let solver_result = solver.backwards_solve(&mut chain, Isometry3 {
         rotation: targ_transform.rotation.into(),
         translation: targ_transform.translation.into(),
     });
@@ -144,12 +144,15 @@ pub fn update(
 fn create_test_chain() -> SerialKChain {
 
     let base = KNodeBuilder::new()
-        .joint_type(KJointType::Revolute { axis: Vector3::y_axis() })
+        .joint_type(KJointType::Fixed)
         .build();
     let n1 = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::y_axis() })
+        .build();
+    let n2 = KNodeBuilder::new()
         .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
         .build();
-    chain_nodes![base => n1];
+    chain_nodes![base => n1 => n2];
 
     let mut prev = n1.clone();
     for _ in 0..10 {
