@@ -84,6 +84,7 @@ pub struct UiState {
     pub reset: bool,
     pub damping: f32,
     pub max_iterations: usize,
+    pub draw_inv_chain: bool
 }
 
 pub fn update(
@@ -100,6 +101,8 @@ pub fn update(
         ui_state.reset = ui.button("Reset").clicked();
         ui.add(egui::Slider::new(&mut ui_state.damping, 0.0..=1.0).text("Damping"));
         ui.add(egui::Slider::new(&mut ui_state.max_iterations, 0..=10).text("Max iterations"));
+
+        ui.checkbox(&mut ui_state.draw_inv_chain, "Draw inverse chain");
     });
     let mut targ_transform = target_q.get_single_mut().ok().unwrap();
 
@@ -122,8 +125,12 @@ pub fn update(
             rotation: targ_transform.rotation.into(),
             translation: targ_transform.translation.into(),
         },
-        // Some(&mut gizmos)
-        None
+        if ui_state.draw_inv_chain{
+            Some(&mut gizmos)
+        }
+        else {
+            None
+        }
     );
     chain.update_world_transforms();
 

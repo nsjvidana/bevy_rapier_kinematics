@@ -195,15 +195,14 @@ impl CyclicIKSolver {
             let mut root_joint = chain.root().unwrap().joint();
 
             let root_space = root_joint.local_transform();
-            let end_space = {
-                let mut transform = root_space;
+            
+            let end_local = {
+                let mut transform = Isometry3::identity();
                 for node in chain.iter().skip(1) {
                     transform *= node.joint().local_transform();
                 }
                 transform
             };
-            
-            let end_local = root_space.inv_mul(&end_space);
             let target_local = root_space.inv_mul(&target_pose);
 
             match root_joint.joint_type() {
