@@ -116,7 +116,7 @@ pub fn update(
         max_iterations: 1,
         per_joint_dampening: 0.
     };
-    let solver_result = solver.backwards_solve(
+    solver.backwards_solve(
         &mut chain,
         Isometry3 {
             rotation: targ_transform.rotation.into(),
@@ -141,9 +141,9 @@ pub fn update(
         prev = joint_pos;
     }
 
-    if solver_result.is_err() {
-        println!("{}", solver_result.err().unwrap());
-    }
+    // if solver_result.is_err() {
+    //     println!("{}", solver_result.err().unwrap());
+    // }
 }
 
 fn create_test_chain() -> SerialKChain {

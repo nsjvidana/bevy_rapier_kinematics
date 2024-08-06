@@ -29,6 +29,14 @@ impl SerialKChain {
         self.nodes.iter()
     }
 
+    pub fn end(&self) -> Option<&KNode> {
+        self.nodes.last()
+    }
+
+    pub fn root(&self) -> Option<&KNode> {
+        self.nodes.first()
+    }
+
     pub fn get_node(&self, idx: usize) -> Option<&KNode> {
         self.nodes.get(idx)
     }
