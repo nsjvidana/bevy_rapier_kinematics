@@ -110,6 +110,10 @@ pub fn update(
     let y_movement = (keys.pressed(KeyCode::KeyU) as i8 - keys.pressed(KeyCode::KeyJ) as i8) as f32;
     let z_movement = (keys.pressed(KeyCode::ArrowDown) as i8 - keys.pressed(KeyCode::ArrowUp) as i8) as f32;
     targ_transform.translation += Vec3::new(x_movement, y_movement, z_movement) * time.delta_seconds();
+    let target_pose = Isometry3 {
+        rotation: targ_transform.rotation.into(),
+        translation: targ_transform.translation.into(),
+    };
 
     
     let mut chain = create_test_chain();
@@ -121,10 +125,7 @@ pub fn update(
     };
     solver.backwards_solve(
         &mut chain,
-        Isometry3 {
-            rotation: targ_transform.rotation.into(),
-            translation: targ_transform.translation.into(),
-        },
+        target_pose,
         if ui_state.draw_inv_chain{
             Some(&mut gizmos)
         }

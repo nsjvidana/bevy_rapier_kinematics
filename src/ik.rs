@@ -98,126 +98,129 @@ impl CyclicIKSolver {
     pub fn backwards_solve(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>, inv_chain_gizmos: Option<&mut Gizmos>) {
         let mut inv_chain = Vec::with_capacity(chain.len());
 
-        {//preparing inv chain with a root that has the best rotation
-            let end = chain.end().unwrap().joint();
+        for _ in 0..self.max_iterations {
+            inv_chain.clear();
+            {//preparing inv chain with a root that has the best rotation
+                let end = chain.end().unwrap().joint();
 
-            let mut inv_root_child_joint = chain.get_node(chain.len()-2).unwrap().joint().clone();
-                inv_root_child_joint.set_origin(*end.origin());
+                let mut inv_root_child_joint = chain.get_node(chain.len()-2).unwrap().joint().clone();
+                    inv_root_child_joint.set_origin(*end.origin());
 
-            let end_space = {
-                let mut transform = Isometry3::identity();
-                for node in chain.iter().take(chain.len()-1) {
-                    transform *= node.joint().local_transform()
-                }
-                transform * end.local_transform()
-            };
+                let end_space = {
+                    let mut transform = Isometry3::identity();
+                    for node in chain.iter().take(chain.len()-1) {
+                        transform *= node.joint().local_transform()
+                    }
+                    transform * end.local_transform()
+                };
 
-            let root_space = Isometry3 {
-                translation: target_pose.translation,
-                ..default()
-            };
-
-            let end_local = root_space.inv_mul(&end_space);
-            let inv_root_child_local = inv_root_child_joint.local_transform();
-            let inv_root_rot = rotation_between_vectors(&inv_root_child_local.translation.vector, &end_local.translation.vector);
-            
-            
-            let mut inv_root_joint = end.clone();
-                inv_root_joint.set_origin(Isometry3 {
+                let root_space = Isometry3 {
                     translation: target_pose.translation,
-                    rotation: inv_root_rot
-                });
-            inv_chain.push(RefCell::new(KNodeData {
-                joint: inv_root_joint,
-                ..Default::default()
-            }));
-            
-            inv_chain.push(RefCell::new(KNodeData {
-                joint: inv_root_child_joint,
-                ..Default::default()
-            }));
-        }
+                    ..default()
+                };
 
-
-
-        for (i, curr_node) in chain.iter().take(chain.len()-1).enumerate().rev() {
-            if i == 0 { break; }
-            
-            let mut curr_joint = curr_node.joint();
-            match curr_joint.joint_type() {
-                KJointType::Fixed => { continue; }
-                KJointType::Revolute { axis } => {
-                    let parent = chain.get_node(i-1).unwrap(); //parent of curr_node
-
-                    let mut inv_seg_child_joint = parent.joint().clone();
-                        inv_seg_child_joint.set_origin(*curr_joint.origin());
-
-                    let parent_space = {
-                        let mut transform = Isometry3::identity();
-                        for node in chain.iter().take(i) {
-                            transform *= node.joint().local_transform();
-                        }
-                        transform
-                    };
-                    
-                    //root of the last segment of the inverse chain
-                    let inv_seg_root_space = {
-                        let mut transform = Isometry3::identity();
-                        //at this point, the new segment isn't added yet, so iter() works.
-                        for inv_node in inv_chain.iter() {
-                            transform *= inv_node.borrow().joint.local_transform();
-                        }
-                        transform
-                    };
-                    
-                    let inv_seg_child_local = inv_seg_child_joint.local_transform();
-                    let parent_local = inv_seg_root_space.inv_mul(&parent_space);
-                    let adjustment = angle_to(
-                        &project_onto_plane(&inv_seg_child_local.translation.vector, axis),
-                        &project_onto_plane(&parent_local.translation.vector, axis),
-                        axis
-                    );
-                    inv_seg_child_joint.increment_position(adjustment);
-                    curr_joint.increment_position(-adjustment);
-
-                    inv_chain.push(RefCell::new(KNodeData {
-                        joint: inv_seg_child_joint.clone(),
-                        ..Default::default()
-                    }));
-                    
-                },
-                #[allow(unused)]
-                KJointType::Linear { axis } => todo!()
+                let end_local = root_space.inv_mul(&end_space);
+                let inv_root_child_local = inv_root_child_joint.local_transform();
+                let inv_root_rot = rotation_between_vectors(&inv_root_child_local.translation.vector, &end_local.translation.vector);
+                
+                
+                let mut inv_root_joint = end.clone();
+                    inv_root_joint.set_origin(Isometry3 {
+                        translation: target_pose.translation,
+                        rotation: inv_root_rot
+                    });
+                inv_chain.push(RefCell::new(KNodeData {
+                    joint: inv_root_joint,
+                    ..Default::default()
+                }));
+                
+                inv_chain.push(RefCell::new(KNodeData {
+                    joint: inv_root_child_joint,
+                    ..Default::default()
+                }));
             }
-        }
-        
-        {//do forwards-solve for the root so that it contributes to the motion of the chain
-            let mut root_joint = chain.root().unwrap().joint();
 
-            let root_space = root_joint.local_transform();
-            
-            let end_local = {
-                let mut transform = Isometry3::identity();
-                for node in chain.iter().skip(1) {
-                    transform *= node.joint().local_transform();
+
+            for (i, curr_node) in chain.iter().take(chain.len()-1).enumerate().rev() {
+                if i == 0 { break; }
+                
+                let mut curr_joint = curr_node.joint();
+                match curr_joint.joint_type() {
+                    KJointType::Fixed => { continue; }
+                    KJointType::Revolute { axis } => {
+                        let parent = chain.get_node(i-1).unwrap(); //parent of curr_node
+
+                        let mut inv_seg_child_joint = parent.joint().clone();
+                            inv_seg_child_joint.set_origin(*curr_joint.origin());
+
+                        let parent_space = {
+                            let mut transform = Isometry3::identity();
+                            for node in chain.iter().take(i) {
+                                transform *= node.joint().local_transform();
+                            }
+                            transform
+                        };
+                        
+                        //root of the last segment of the inverse chain
+                        let inv_seg_root_space = {
+                            let mut transform = Isometry3::identity();
+                            //at this point, the new segment isn't added yet, so iter() works.
+                            for inv_node in inv_chain.iter() {
+                                transform *= inv_node.borrow().joint.local_transform();
+                            }
+                            transform
+                        };
+                        
+                        let inv_seg_child_local = inv_seg_child_joint.local_transform();
+                        let parent_local = inv_seg_root_space.inv_mul(&parent_space);
+                        let adjustment = angle_to(
+                            &project_onto_plane(&inv_seg_child_local.translation.vector, axis),
+                            &project_onto_plane(&parent_local.translation.vector, axis),
+                            axis
+                        );
+                        inv_seg_child_joint.increment_position(adjustment);
+                        curr_joint.increment_position(-adjustment);
+
+                        inv_chain.push(RefCell::new(KNodeData {
+                            joint: inv_seg_child_joint.clone(),
+                            ..Default::default()
+                        }));
+                        
+                    },
+                    #[allow(unused)]
+                    KJointType::Linear { axis } => todo!()
                 }
-                transform
-            };
-            let target_local = root_space.inv_mul(&target_pose);
-
-            match root_joint.joint_type() {
-                KJointType::Fixed => {}
-                KJointType::Revolute { axis } => {
-                    let adjustment = angle_to(
-                        &project_onto_plane(&end_local.translation.vector, axis),
-                        &project_onto_plane(&target_local.translation.vector, axis),
-                        axis
-                    );
-                    root_joint.increment_position(adjustment);
-                },
-                #[allow(unused)]
-                KJointType::Linear { axis } => todo!()
             }
+            
+            if false {//do forwards-solve for the root so that it contributes to the motion of the chain
+                let mut root_joint = chain.root().unwrap().joint();
+
+                let root_space = root_joint.local_transform();
+                
+                let end_local = {
+                    let mut transform = Isometry3::identity();
+                    for node in chain.iter().skip(1) {
+                        transform *= node.joint().local_transform();
+                    }
+                    transform
+                };
+                let target_local = root_space.inv_mul(&target_pose);
+
+                match root_joint.joint_type() {
+                    KJointType::Fixed => {}
+                    KJointType::Revolute { axis } => {
+                        let adjustment = angle_to(
+                            &project_onto_plane(&end_local.translation.vector, axis),
+                            &project_onto_plane(&target_local.translation.vector, axis),
+                            axis
+                        );
+                        root_joint.increment_position(adjustment);
+                    },
+                    #[allow(unused)]
+                    KJointType::Linear { axis } => todo!()
+                }
+            }
+
         }
 
         if let Some(gizmos) = inv_chain_gizmos {//drawing inverse chain
@@ -249,7 +252,6 @@ impl CyclicIKSolver {
                 prev = joint_pos;
             }
         }
-
         
     }
 }
