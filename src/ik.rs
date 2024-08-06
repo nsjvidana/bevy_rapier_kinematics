@@ -1,9 +1,9 @@
 use std::{cell::RefCell, sync::Arc};
 
-use bevy::{color::Color, math::Vec3, prelude::{App, Gizmos, Plugin}, utils::default};
+use bevy::{color::Color, math::Vec3, prelude::{App, Gizmos, Plugin, TransformBundle}, utils::default};
 use bevy_rapier3d::{math::Real, na::{Isometry3, Translation3, UnitQuaternion, Vector3}};
 
-use crate::{chain::SerialKChain, math_utils::{angle_between, project_onto_plane, rotation_between_vectors}, node::{KError, KJointType, KNodeData}};
+use crate::{chain::SerialKChain, math_utils::{angle_to, project_onto_plane, rotation_between_vectors}, node::{KError, KJointType, KNodeData}};
 
 
 pub struct IKPlugin;
@@ -71,7 +71,7 @@ impl CyclicIKSolver {
                 let target_projected = project_onto_plane(&local_target.translation.vector, joint_axis);
                 let end_projected = project_onto_plane(&local_end.translation.vector, joint_axis);
                 //the angle between the projected vectors is the joint's position (limited by joint limits)
-                let angle = angle_between(&end_projected, &target_projected, joint_axis);
+                let angle = angle_to(&end_projected, &target_projected, joint_axis);
                 curr_joint.set_position_clamped(
                     angle * (1.-self.per_joint_dampening)
                 );
@@ -95,10 +95,10 @@ impl CyclicIKSolver {
         })
     }
 
-    pub fn backwards_solve(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>, gizmos: &mut Gizmos) {
+    pub fn backwards_solve(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>, inv_chain_gizmos: Option<&mut Gizmos>) {
         let mut inv_chain = Vec::with_capacity(chain.len());
 
-        {
+        {//preparing inv chain with a root that has the best rotation
             let end = chain.end().unwrap().joint();
 
             let mut inv_root_child_joint = chain.get_node(chain.len()-2).unwrap().joint().clone();
@@ -138,6 +138,8 @@ impl CyclicIKSolver {
             }));
         }
 
+
+
         for (i, curr_node) in chain.iter().take(chain.len()-1).enumerate().rev() {
             if i == 0 { break; }
             
@@ -170,7 +172,7 @@ impl CyclicIKSolver {
                     
                     let inv_seg_child_local = inv_seg_child_joint.local_transform();
                     let parent_local = inv_seg_root_space.inv_mul(&parent_space);
-                    let adjustment = angle_between(
+                    let adjustment = angle_to(
                         &project_onto_plane(&inv_seg_child_local.translation.vector, axis),
                         &project_onto_plane(&parent_local.translation.vector, axis),
                         axis
@@ -189,7 +191,37 @@ impl CyclicIKSolver {
             }
         }
         
-        {//drawing inverse chain
+        {//do forwards-solve for the root so that it contributes to the motion of the chain
+            let mut root_joint = chain.root().unwrap().joint();
+
+            let root_space = root_joint.local_transform();
+            let end_space = {
+                let mut transform = root_space;
+                for node in chain.iter().skip(1) {
+                    transform *= node.joint().local_transform();
+                }
+                transform
+            };
+            
+            let end_local = root_space.inv_mul(&end_space);
+            let target_local = root_space.inv_mul(&target_pose);
+
+            match root_joint.joint_type() {
+                KJointType::Fixed => {}
+                KJointType::Revolute { axis } => {
+                    let adjustment = angle_to(
+                        &project_onto_plane(&end_local.translation.vector, axis),
+                        &project_onto_plane(&target_local.translation.vector, axis),
+                        axis
+                    );
+                    root_joint.increment_position(adjustment);
+                },
+                #[allow(unused)]
+                KJointType::Linear { axis } => todo!()
+            }
+        }
+
+        if let Some(gizmos) = inv_chain_gizmos {//drawing inverse chain
             for (i, node) in inv_chain.iter().enumerate() {
                 let curr_joint = &mut node.borrow_mut().joint;
     

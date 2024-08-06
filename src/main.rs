@@ -122,7 +122,8 @@ pub fn update(
             rotation: targ_transform.rotation.into(),
             translation: targ_transform.translation.into(),
         },
-        &mut gizmos
+        // Some(&mut gizmos)
+        None
     );
     chain.update_world_transforms();
 
@@ -149,7 +150,7 @@ pub fn update(
 fn create_test_chain() -> SerialKChain {
 
     let base = KNodeBuilder::new()
-        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+        .joint_type(KJointType::Revolute { axis: Vector3::y_axis() })
         .build();
 
     let mut prev = base.clone();
