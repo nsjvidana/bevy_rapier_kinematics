@@ -23,7 +23,7 @@ pub fn project_onto_plane(vector: &Vector3<Real>, plane_normal: &UnitVector3<Rea
 /// 
 /// The angle that is returned comes with the appropriate sign for a right-handed rotation
 /// (Positive angle for counterclockwise rotation, negative for clockwise)
-pub fn angle_between(a: &Vector3<Real>, b: &Vector3<Real>, n: &UnitVector3<Real>) -> Real {
+pub fn angle_to(a: &Vector3<Real>, b: &Vector3<Real>, n: &UnitVector3<Real>) -> Real {
     SimdRealField::simd_atan2(
         a.cross(b).dot(n),
         a.dot(b)
