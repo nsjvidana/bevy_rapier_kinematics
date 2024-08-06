@@ -149,17 +149,10 @@ pub fn update(
 fn create_test_chain() -> SerialKChain {
 
     let base = KNodeBuilder::new()
-        .joint_type(KJointType::Fixed)
-        .build();
-    let n1 = KNodeBuilder::new()
-        .joint_type(KJointType::Revolute { axis: Vector3::y_axis() })
-        .build();
-    let n2 = KNodeBuilder::new()
         .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
         .build();
-    chain_nodes![base => n1 => n2];
 
-    let mut prev = n1.clone();
+    let mut prev = base.clone();
     for _ in 0..10 {
         let node = KNodeBuilder::new()
             .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
