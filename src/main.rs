@@ -158,7 +158,7 @@ pub fn update(
 fn create_test_chain() -> SerialKChain {
 
     let base = KNodeBuilder::new()
-        .joint_type(KJointType::Revolute { axis: Vector3::y_axis() })
+        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
         .build();
 
     let mut prev = base.clone();

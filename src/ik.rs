@@ -114,21 +114,33 @@ impl CyclicIKSolver {
                     transform * end.local_transform()
                 };
 
-                let root_space = Isometry3 {
+                let mut inv_root_space = Isometry3 {
                     translation: target_pose.translation,
                     ..default()
                 };
 
-                let end_local = root_space.inv_mul(&end_space);
+                let end_local = inv_root_space.inv_mul(&end_space);
                 let inv_root_child_local = inv_root_child_joint.local_transform();
-                let inv_root_rot = rotation_between_vectors(&inv_root_child_local.translation.vector, &end_local.translation.vector);
-                
-                
+
                 let mut inv_root_joint = end.clone();
-                    inv_root_joint.set_origin(Isometry3 {
-                        translation: target_pose.translation,
-                        rotation: inv_root_rot
-                    });
+                match inv_root_joint.joint_type() {
+                    KJointType::Fixed => {
+                        inv_root_space.rotation = rotation_between_vectors(&inv_root_child_local.translation.vector, &end_local.translation.vector);
+                    },
+                    KJointType::Revolute { axis } => {
+                        let adjustment = angle_to(
+                            &project_onto_plane(&inv_root_child_local.translation.vector, axis),
+                            &project_onto_plane(&end_local.translation.vector, axis),
+                            axis
+                        );
+                        inv_root_joint.increment_position(adjustment);
+                    },
+                    //i might just make linear the same as fixed.
+                    #[allow(unused)]
+                    KJointType::Linear { axis } => todo!()
+                }
+                inv_root_joint.set_origin(inv_root_space);
+                
                 inv_chain.push(RefCell::new(KNodeData {
                     joint: inv_root_joint,
                     ..Default::default()
@@ -139,7 +151,6 @@ impl CyclicIKSolver {
                     ..Default::default()
                 }));
             }
-
 
             for (i, curr_node) in chain.iter().take(chain.len()-1).enumerate().rev() {
                 if i == 0 { break; }
@@ -192,7 +203,7 @@ impl CyclicIKSolver {
                 }
             }
             
-            if false {//do forwards-solve for the root so that it contributes to the motion of the chain
+            {//do forwards-solve for the root so that it contributes to the motion of the chain
                 let mut root_joint = chain.root().unwrap().joint();
 
                 let root_space = root_joint.local_transform();
