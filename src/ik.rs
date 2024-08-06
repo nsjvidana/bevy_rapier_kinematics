@@ -189,34 +189,34 @@ impl CyclicIKSolver {
             }
         }
         
-        {//drawing gizmos
-            // for (i, node) in inv_chain.iter().enumerate() {
-            //     let curr_joint = &mut node.borrow_mut().joint;
+        {//drawing inverse chain
+            for (i, node) in inv_chain.iter().enumerate() {
+                let curr_joint = &mut node.borrow_mut().joint;
     
-            //     let mut transform = Isometry3::identity();
-            //     for joint in inv_chain.iter().take(i) {
-            //         transform *= joint.borrow().joint.local_transform();
-            //     }
-            //     transform *= curr_joint.local_transform();
+                let mut transform = Isometry3::identity();
+                for joint in inv_chain.iter().take(i) {
+                    transform *= joint.borrow().joint.local_transform();
+                }
+                transform *= curr_joint.local_transform();
     
-            //     curr_joint.world_transform_cache = Some(transform);
-            // }
+                curr_joint.world_transform_cache = Some(transform);
+            }
 
-            // let mut prev = inv_chain[0].borrow().joint.local_transform().translation.into();
-            // let color = Color::linear_rgb(0., 1., 0.);
-            // for node in inv_chain.iter().skip(1) {
-            //     let joint = &node.borrow().joint;
-            //     let joint_pos: Vec3 = joint.world_transform().unwrap().translation.into();
+            let mut prev = inv_chain[0].borrow().joint.local_transform().translation.into();
+            let color = Color::linear_rgb(0., 1., 0.);
+            for node in inv_chain.iter().skip(1) {
+                let joint = &node.borrow().joint;
+                let joint_pos: Vec3 = joint.world_transform().unwrap().translation.into();
                 
-            //     gizmos.sphere(
-            //         joint_pos,
-            //         default(),
-            //         0.05,
-            //         color
-            //     );
-            //     gizmos.line(prev, joint_pos, color);
-            //     prev = joint_pos;
-            // }
+                gizmos.sphere(
+                    joint_pos,
+                    default(),
+                    0.05,
+                    color
+                );
+                gizmos.line(prev, joint_pos, color);
+                prev = joint_pos;
+            }
         }
 
         
