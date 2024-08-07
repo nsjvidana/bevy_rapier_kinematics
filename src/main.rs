@@ -85,6 +85,7 @@ pub struct UiState {
     pub stepping_mode_enabled: bool,
     pub reset: bool,
     pub damping: f32,
+    #[derivative(Default(value="1"))]
     pub max_iterations: usize,
     #[derivative(Default(value="true"))]
     pub debug_draw: bool
@@ -103,7 +104,7 @@ pub fn update(
         ui.checkbox(&mut ui_state.stepping_mode_enabled, "Enable Stepping");
         ui_state.reset = ui.button("Reset").clicked();
         ui.add(egui::Slider::new(&mut ui_state.damping, 0.0..=1.0).text("Damping"));
-        ui.add(egui::Slider::new(&mut ui_state.max_iterations, 0..=10).text("Max iterations"));
+        ui.add(egui::Slider::new(&mut ui_state.max_iterations, 1..=10).text("Max iterations"));
 
         ui.checkbox(&mut ui_state.debug_draw, "Debug draw");
     });
@@ -120,22 +121,49 @@ pub fn update(
 
     
     let mut chain = create_test_chain();
-    let solver = CyclicIKSolver {
+    let mut solver = CyclicIKSolver {
         allowable_target_distance: 0.1,
         allowable_target_angle: 1f32.to_radians(),
-        max_iterations: 1,
-        per_joint_dampening: 0.
+        max_iterations: ui_state.max_iterations,
+        per_joint_dampening: ui_state.damping
     };
-    solver.backwards_solve(
-        &mut chain,
-        target_pose,
-        if ui_state.debug_draw{
-            Some(&mut gizmos)
-        }
-        else {
-            None
-        }
-    );
+
+    #[allow(unused_must_use)]
+    {
+        solver.per_joint_dampening = 0.75;
+        solver.forward_ascent(
+            &mut chain,
+            target_pose,
+            if ui_state.debug_draw{
+                Some(&mut gizmos)
+            }
+            else {
+                None
+            }
+        );
+        solver.per_joint_dampening = 0.5;
+        solver.forward_descent(
+            &mut chain,
+            target_pose,
+            if ui_state.debug_draw{
+                Some(&mut gizmos)
+            }
+            else {
+                None
+            }
+        );
+        solver.per_joint_dampening = 0.;
+        solver.forward_descent(
+            &mut chain,
+            target_pose,
+            if ui_state.debug_draw{
+                Some(&mut gizmos)
+            }
+            else {
+                None
+            }
+        );
+    }
     chain.update_world_transforms();
 
     let mut prev = Vec3::ZERO;
@@ -161,7 +189,7 @@ pub fn update(
 fn create_test_chain() -> SerialKChain {
 
     let base = KNodeBuilder::new()
-        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+        .joint_type(KJointType::Revolute { axis: Vector3::y_axis() })
         .build();
 
     let mut prev = base.clone();

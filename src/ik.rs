@@ -24,7 +24,7 @@ pub struct CyclicIKSolver {
 }
 
 impl CyclicIKSolver {
-    pub fn forward_descent(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>) -> Result<(), KError> {
+    pub fn forward_descent(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>, _: Option<&mut Gizmos>) -> Result<(), KError> {
         let mut dist_to_target = 0.;
         let mut angle_to_target = 0.;
 
@@ -69,10 +69,8 @@ impl CyclicIKSolver {
                 let target_projected = project_onto_plane(&local_target.translation.vector, joint_axis);
                 let end_projected = project_onto_plane(&local_end.translation.vector, joint_axis);
                 //the angle between the projected vectors is the joint's position (limited by joint limits)
-                let angle = angle_to(&end_projected, &target_projected, joint_axis);
-                curr_joint.set_position_clamped(
-                    angle * (1.-self.per_joint_dampening)
-                );
+                let adjustment = angle_to(&end_projected, &target_projected, joint_axis);
+                curr_joint.increment_position(adjustment * (1. - self.per_joint_dampening));
             }
             
             //skip all the other iterations if we already reached the target pose.  
@@ -91,6 +89,49 @@ impl CyclicIKSolver {
             position_diff: dist_to_target,
             angle_diff: angle_to_target
         })
+
+    }
+
+    pub fn forward_ascent(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>, _: Option<&mut Gizmos>) -> Result<(), KError> {
+        
+        for _ in 0..self.max_iterations {
+            for (i, node) in chain.iter().enumerate() {
+                let mut curr_joint = node.joint();
+                
+                let joint_space = {
+                    let mut transform = Isometry3::identity();
+                    for node in chain.iter().take(i) {
+                        transform *= node.joint().local_transform();
+                    }
+                    transform *= curr_joint.local_transform();
+                    transform
+                };
+
+                let joint_axis = match curr_joint.joint_type() {
+                    KJointType::Revolute { axis } => axis,
+                    KJointType::Fixed => continue,
+                    #[allow(unused)]
+                    KJointType::Linear { axis } => todo!()
+                };
+
+                let local_end = {
+                    let mut transform = Isometry3::identity();
+                    for node in chain.iter().skip(i+1) {
+                        transform *= node.joint().local_transform()
+                    }
+                    transform
+                };
+                let local_target = joint_space.inverse() * target_pose;
+
+                let end_projected = project_onto_plane(&local_end.translation.vector, joint_axis);
+                let target_projected = project_onto_plane(&local_target.translation.vector, joint_axis);
+                let adjustment = angle_to(&end_projected, &target_projected, joint_axis);
+                curr_joint.increment_position(adjustment * (1. - self.per_joint_dampening));
+            }
+        }
+
+        Ok(())
+
     }
 
     pub fn backwards_solve(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>, inv_chain_gizmos: Option<&mut Gizmos>) {
