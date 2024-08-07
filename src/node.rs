@@ -252,6 +252,15 @@ pub enum KError {
         num_tries: usize,
         position_diff: Real,
         angle_diff: Real,
+    },
+    #[error(
+        "Size mismatch. input size = {0}, required size = {1}",
+        input_size,
+        required_size,
+    )]
+    SizeMismatchError {
+        input_size: usize,
+        required_size: usize
     }
 }
 

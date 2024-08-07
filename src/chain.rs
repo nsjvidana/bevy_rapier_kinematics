@@ -1,8 +1,8 @@
 use std::slice::Iter;
 
-use bevy_rapier3d::na::Isometry3;
+use bevy_rapier3d::{math::Real, na::Isometry3};
 
-use crate::node::{KJointRef, KNode};
+use crate::node::{KError, KJointRef, KNode};
 
 #[derive(Default)]
 pub struct SerialKChain {
@@ -43,6 +43,28 @@ impl SerialKChain {
 
     pub fn len(&self) -> usize {
         self.nodes.len()
+    }
+
+    pub fn set_joint_positions(&self, positions: &[Real]) -> Result<(), KError> {
+        if positions.len() != self.len() {
+            return Err(KError::SizeMismatchError { input_size: positions.len(), required_size: self.len() })
+        }
+
+        for (node, pos) in self.nodes.iter().zip(positions.iter()) {
+            node.joint().set_position(*pos)?;
+        }
+        Ok(())
+    }
+
+    pub fn set_joint_positions_deg(&self, positions: &[Real]) -> Result<(), KError> {
+        if positions.len() != self.len() {
+            return Err(KError::SizeMismatchError { input_size: positions.len(), required_size: self.len() })
+        }
+
+        for (node, pos) in self.nodes.iter().zip(positions.iter()) {
+            node.joint().set_position(pos.to_radians())?;
+        }
+        Ok(())
     }
 
     pub fn update_world_transforms(&mut self) {
