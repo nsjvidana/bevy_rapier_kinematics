@@ -30,9 +30,6 @@ impl CyclicIKSolver {
 
         for _ in 0..self.max_iterations {
             
-            //store the end effector's world space transform to avoid having to compute it twice
-            let mut end_world_space = None;
-            
             for (i, node) in chain.iter().enumerate().rev() {
                 let mut curr_joint = node.joint();
                 
@@ -44,11 +41,6 @@ impl CyclicIKSolver {
                     transform *= curr_joint.local_transform();
                     transform
                 };
-                
-                //if this is the end node, we store this joint's world space transform for later use.
-                if i == chain.len()-1 {
-                    end_world_space = Some(joint_space);
-                }
 
                 let joint_axis = match curr_joint.joint_type() {
                     KJointType::Revolute { axis } => axis,
@@ -73,12 +65,19 @@ impl CyclicIKSolver {
                 curr_joint.increment_position(adjustment * (1. - self.per_joint_dampening));
             }
             
-            //skip all the other iterations if we already reached the target pose.  
-            let end_world_space = end_world_space.unwrap();
+            
+            let end_world_space = {
+                let mut transform = chain.get_node(0).unwrap().joint().local_transform();
+                for node in chain.iter().skip(1) {
+                    transform *= node.joint().local_transform();
+                }
+                transform
+            };
             dist_to_target = end_world_space.translation.vector.metric_distance(&target_pose.translation.vector);
             angle_to_target = end_world_space.rotation.angle_to(&target_pose.rotation);
             if dist_to_target <= self.allowable_target_distance &&
-                angle_to_target <= self.allowable_target_angle {
+                angle_to_target <= self.allowable_target_angle
+            {
                 return Ok(())
             }
         }
@@ -93,6 +92,8 @@ impl CyclicIKSolver {
     }
 
     pub fn forward_ascent(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>, _: Option<&mut Gizmos>) -> Result<(), KError> {
+        let mut dist_to_target = 0.;
+        let mut angle_to_target = 0.;
         
         for _ in 0..self.max_iterations {
             for (i, node) in chain.iter().enumerate() {
@@ -128,9 +129,29 @@ impl CyclicIKSolver {
                 let adjustment = angle_to(&end_projected, &target_projected, joint_axis);
                 curr_joint.increment_position(adjustment * (1. - self.per_joint_dampening));
             }
+            
+            let end_world_space = {
+                let mut transform = chain.get_node(0).unwrap().joint().local_transform();
+                for node in chain.iter().skip(1) {
+                    transform *= node.joint().local_transform();
+                }
+                transform
+            };
+            dist_to_target = end_world_space.translation.vector.metric_distance(&target_pose.translation.vector);
+            angle_to_target = end_world_space.rotation.angle_to(&target_pose.rotation);
+            if dist_to_target <= self.allowable_target_distance &&
+                angle_to_target <= self.allowable_target_angle
+            {
+                return Ok(())
+            }
         }
 
-        Ok(())
+        Err(KError::SolverNotConverged {
+            solver_type: "Cyclic".into(),
+            num_tries: self.max_iterations,
+            position_diff: dist_to_target,
+            angle_diff: angle_to_target
+        })
 
     }
 

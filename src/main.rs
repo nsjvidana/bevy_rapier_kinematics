@@ -131,6 +131,7 @@ pub fn update(
     #[allow(unused_must_use)]
     {
         solver.per_joint_dampening = 0.75;
+        solver.max_iterations = 1;
         solver.forward_ascent(
             &mut chain,
             target_pose,
@@ -152,7 +153,9 @@ pub fn update(
                 None
             }
         );
+
         solver.per_joint_dampening = 0.;
+        solver.max_iterations = 10;
         solver.forward_descent(
             &mut chain,
             target_pose,
