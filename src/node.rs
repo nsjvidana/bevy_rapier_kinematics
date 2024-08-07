@@ -89,6 +89,14 @@ impl KNodeBuilder {
         self
     }
 
+    pub fn limits_deg(mut self, limits: [Real; 2]) -> Self {
+        self.0.joint.limits = [
+            limits[0].to_radians(),
+            limits[1].to_radians(),
+        ];
+        self
+    }
+
     pub fn name(mut self, name: String) -> Self {
         self.0.joint.name = name;
         self
