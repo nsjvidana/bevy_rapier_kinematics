@@ -6,7 +6,6 @@ use bevy_rapier3d::{math::Real, na::{Isometry3, Translation3, UnitQuaternion, Ve
 
 use crate::{chain::SerialKChain, math_utils::{angle_to, project_onto_plane, rotation_between_vectors}, node::{KError, KJointRef, KJointType, KNodeData}};
 
-
 pub struct IKPlugin;
 
 impl Plugin for IKPlugin {
@@ -28,6 +27,7 @@ impl CyclicIKSolver {
         let mut dist_to_target = 0.;
         let mut angle_to_target = 0.;
 
+        let mut target_reached = false;
         for _ in 0..self.max_iterations {
             
             for (i, node) in chain.iter().enumerate().rev() {
@@ -78,23 +78,29 @@ impl CyclicIKSolver {
             if dist_to_target <= self.allowable_target_distance &&
                 angle_to_target <= self.allowable_target_angle
             {
-                return Ok(())
+                target_reached = true;
+                break;
             }
         }
 
-        Err(KError::SolverNotConverged {
-            solver_type: "Cyclic".into(),
-            num_tries: self.max_iterations,
-            position_diff: dist_to_target,
-            angle_diff: angle_to_target
-        })
-
+        if !target_reached {
+            Err(KError::SolverNotConverged {
+                solver_type: "Cyclic".into(),
+                num_tries: self.max_iterations,
+                position_diff: dist_to_target,
+                angle_diff: angle_to_target
+            })
+        }
+        else {
+            Ok(())
+        }
     }
 
     pub fn forward_ascent(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>, _: Option<&mut Gizmos>) -> Result<(), KError> {
         let mut dist_to_target = 0.;
         let mut angle_to_target = 0.;
         
+        let mut target_reached = false;
         for _ in 0..self.max_iterations {
             for (i, node) in chain.iter().enumerate() {
                 let mut curr_joint = node.joint();
@@ -142,36 +148,45 @@ impl CyclicIKSolver {
             if dist_to_target <= self.allowable_target_distance &&
                 angle_to_target <= self.allowable_target_angle
             {
-                return Ok(())
+                target_reached = true;
+                break;
             }
         }
 
-        Err(KError::SolverNotConverged {
-            solver_type: "Cyclic".into(),
-            num_tries: self.max_iterations,
-            position_diff: dist_to_target,
-            angle_diff: angle_to_target
-        })
-
+        if !target_reached {
+            Err(KError::SolverNotConverged {
+                solver_type: "Cyclic".into(),
+                num_tries: self.max_iterations,
+                position_diff: dist_to_target,
+                angle_diff: angle_to_target
+            })
+        }
+        else {
+            Ok(())
+        }
     }
 
-    pub fn backwards_solve(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>, inv_chain_gizmos: Option<&mut Gizmos>) {
+    pub fn backwards_solve(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>, debug_gizmos: Option<&mut Gizmos>) -> Result<(), KError> {
+        //only compute distance to target because this solver doesn't solve for target rotation
+        let mut dist_to_target = 0.;
+        
         let mut inv_chain = Vec::with_capacity(chain.len());
 
+        let mut target_reached = false;
         for _ in 0..self.max_iterations {
             inv_chain.clear();
             {//preparing inv chain with a root that has the best rotation
-                let end = chain.end().unwrap().joint();
+                let mut end_joint = chain.end().unwrap().joint();
 
                 let mut inv_root_child_joint = chain.get_node(chain.len()-2).unwrap().joint().clone();
-                    inv_root_child_joint.set_origin(*end.origin());
+                    inv_root_child_joint.set_origin(*end_joint.origin());
 
                 let end_space = {
                     let mut transform = Isometry3::identity();
                     for node in chain.iter().take(chain.len()-1) {
                         transform *= node.joint().local_transform()
                     }
-                    transform * end.local_transform()
+                    transform * end_joint.local_transform()
                 };
 
                 let mut inv_root_space = Isometry3 {
@@ -182,7 +197,7 @@ impl CyclicIKSolver {
                 let end_local = inv_root_space.inv_mul(&end_space);
                 let inv_root_child_local = inv_root_child_joint.local_transform();
 
-                let mut inv_root_joint = end.clone();
+                let mut inv_root_joint = end_joint.clone();
                 match inv_root_joint.joint_type() {
                     KJointType::Fixed => {
                         inv_root_space.rotation = rotation_between_vectors(&inv_root_child_local.translation.vector, &end_local.translation.vector);
@@ -194,6 +209,7 @@ impl CyclicIKSolver {
                             axis
                         );
                         inv_root_joint.increment_position(adjustment);
+                        end_joint.increment_position(-adjustment);
                     },
                     //i might just make linear the same as fixed.
                     #[allow(unused)]
@@ -263,18 +279,21 @@ impl CyclicIKSolver {
                 }
             }
             
+            let end_space;
+
             {//do forwards-solve for the root so that it contributes to the motion of the chain
                 let mut root_joint = chain.root().unwrap().joint();
 
                 let root_space = root_joint.local_transform();
                 
-                let end_local = {
-                    let mut transform = Isometry3::identity();
+                end_space = {
+                    let mut transform = root_space;
                     for node in chain.iter().skip(1) {
                         transform *= node.joint().local_transform();
                     }
                     transform
                 };
+                let end_local = root_space.inv_mul(&end_space);
                 let target_local = root_space.inv_mul(&target_pose);
 
                 match root_joint.joint_type() {
@@ -292,9 +311,15 @@ impl CyclicIKSolver {
                 }
             }
 
+
+            dist_to_target = end_space.translation.vector.metric_distance(&target_pose.translation.vector);
+            if dist_to_target <= self.allowable_target_distance {
+                target_reached = true;
+                break;
+            }
         }
 
-        if let Some(gizmos) = inv_chain_gizmos {//drawing inverse chain
+        if let Some(gizmos) = debug_gizmos {//drawing inverse chain
             for (i, node) in inv_chain.iter().enumerate() {
                 let curr_joint = &mut node.borrow_mut().joint;
     
@@ -324,6 +349,17 @@ impl CyclicIKSolver {
             }
         }
         
+        if !target_reached {
+            Err(KError::SolverNotConverged {
+                solver_type: "Cyclic".into(),
+                num_tries: self.max_iterations,
+                position_diff: dist_to_target,
+                angle_diff: 0.
+            })
+        }
+        else {
+            Ok(())
+        }
     }
 
 }

@@ -128,8 +128,7 @@ pub fn update(
         per_joint_dampening: ui_state.damping
     };
 
-    #[allow(unused_must_use)]
-    {
+    #[allow(unused_must_use)] if false {
         solver.per_joint_dampening = 0.75;
         solver.max_iterations = 1;
         solver.forward_ascent(
@@ -167,6 +166,20 @@ pub fn update(
             }
         );
     }
+
+    {
+        solver.backwards_solve(
+            &mut chain,
+            target_pose,
+            if ui_state.debug_draw {
+                Some(&mut gizmos)
+            }
+            else {
+                None
+            }
+        );
+    }
+
     chain.update_world_transforms();
 
     let mut prev = Vec3::ZERO;
