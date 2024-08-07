@@ -1,9 +1,10 @@
 use std::{cell::RefCell, sync::Arc};
 
 use bevy::{color::Color, math::Vec3, prelude::{App, Gizmos, Plugin, TransformBundle}, utils::default};
+use bevy_egui::node;
 use bevy_rapier3d::{math::Real, na::{Isometry3, Translation3, UnitQuaternion, Vector3}};
 
-use crate::{chain::SerialKChain, math_utils::{angle_to, project_onto_plane, rotation_between_vectors}, node::{KError, KJointType, KNodeData}};
+use crate::{chain::SerialKChain, math_utils::{angle_to, project_onto_plane, rotation_between_vectors}, node::{KError, KJointRef, KJointType, KNodeData}};
 
 
 pub struct IKPlugin;
@@ -23,7 +24,7 @@ pub struct CyclicIKSolver {
 }
 
 impl CyclicIKSolver {
-    pub fn solve(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>) -> Result<(), KError>{
+    pub fn forward_descent(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>) -> Result<(), KError> {
         let mut dist_to_target = 0.;
         let mut angle_to_target = 0.;
 
@@ -52,11 +53,8 @@ impl CyclicIKSolver {
                 let joint_axis = match curr_joint.joint_type() {
                     KJointType::Revolute { axis } => axis,
                     KJointType::Fixed => continue,
-                    _ => return Err(KError::SolverIncompatibleWithJointType {
-                        joint_name: curr_joint.name.clone(),
-                        joint_type: format!("{:?}", curr_joint.joint_type()),
-                        solver_type: "Cyclic".into()
-                    })
+                    #[allow(unused)]
+                    KJointType::Linear { axis } => todo!()
                 };
 
                 let local_target = joint_space.inverse() * target_pose;
@@ -265,4 +263,5 @@ impl CyclicIKSolver {
         }
         
     }
+
 }

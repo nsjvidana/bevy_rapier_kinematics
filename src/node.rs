@@ -232,12 +232,6 @@ pub enum KError {
         min_limit: Real,
         max_limit: Real,
     },
-    #[error("Solver incompatible with joint \"{0}\" of type {1}. Solver type: {2}", joint_name, joint_type, solver_type)]
-    SolverIncompatibleWithJointType {
-        joint_name: String,
-        joint_type: String,
-        solver_type: String
-    },
     #[error(
         "IK Solver of type {0} tried {1} times but did not converge. position_diff = {2}, angle_diff = {3}",
         solver_type,

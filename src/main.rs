@@ -7,6 +7,8 @@ mod chain;
 mod node;
 mod iterator;
 
+use std::cell::RefCell;
+
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
 use bevy_rapier3d::na::{Isometry3, Vector3};
@@ -84,7 +86,8 @@ pub struct UiState {
     pub reset: bool,
     pub damping: f32,
     pub max_iterations: usize,
-    pub draw_inv_chain: bool
+    #[derivative(Default(value="true"))]
+    pub debug_draw: bool
 }
 
 pub fn update(
@@ -102,7 +105,7 @@ pub fn update(
         ui.add(egui::Slider::new(&mut ui_state.damping, 0.0..=1.0).text("Damping"));
         ui.add(egui::Slider::new(&mut ui_state.max_iterations, 0..=10).text("Max iterations"));
 
-        ui.checkbox(&mut ui_state.draw_inv_chain, "Draw inverse chain");
+        ui.checkbox(&mut ui_state.debug_draw, "Debug draw");
     });
     let mut targ_transform = target_q.get_single_mut().ok().unwrap();
 
@@ -126,7 +129,7 @@ pub fn update(
     solver.backwards_solve(
         &mut chain,
         target_pose,
-        if ui_state.draw_inv_chain{
+        if ui_state.debug_draw{
             Some(&mut gizmos)
         }
         else {
