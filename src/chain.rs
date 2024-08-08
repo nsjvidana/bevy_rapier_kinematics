@@ -2,23 +2,40 @@ use std::slice::Iter;
 
 use bevy_rapier3d::{math::Real, na::Isometry3};
 
-use crate::node::{KError, KJointRef, KNode};
+use crate::node::{KError, KJointRef, KJointType, KNode};
 
 #[derive(Default)]
 pub struct SerialKChain {
-    nodes: Vec<KNode>
+    nodes: Vec<KNode>,
+    movable_nodes: Vec<KNode>
 }
 
 impl SerialKChain {
     pub fn from_root(root: &KNode) -> Self {
-        let mut chain = SerialKChain::default();
-        chain.nodes.push(root.clone());
+        let mut nodes = Vec::new();
 
+        nodes.push(root.clone());
         for child in root.iter_children() {
-            chain.nodes.push(child);
+            nodes.push(child);
         }
 
-        chain
+        SerialKChain::from_nodes(nodes)
+    }
+
+    pub fn from_nodes(nodes: Vec<KNode>) -> SerialKChain {
+        let movable_nodes: Vec<KNode> = nodes
+            .iter()
+            .filter(|node| !matches!(node.joint().joint_type(), KJointType::Fixed))
+            .cloned()
+            .collect();
+        SerialKChain {
+            nodes,
+            movable_nodes
+        }
+    }
+
+    pub fn num_movable_nodes(&self) -> usize {
+        self.movable_nodes.len()
     }
 
     pub fn iter_joints(&self) -> impl Iterator<Item = KJointRef<'_>> {
@@ -46,8 +63,8 @@ impl SerialKChain {
     }
 
     pub fn set_joint_positions(&self, positions: &[Real]) -> Result<(), KError> {
-        if positions.len() != self.len() {
-            return Err(KError::SizeMismatchError { input_size: positions.len(), required_size: self.len() })
+        if positions.len() != self.num_movable_nodes() {
+            return Err(KError::SizeMismatchError { input_size: positions.len(), required_size: self.num_movable_nodes() })
         }
 
         for (node, pos) in self.nodes.iter().zip(positions.iter()) {
@@ -57,8 +74,8 @@ impl SerialKChain {
     }
 
     pub fn set_joint_positions_deg(&self, positions: &[Real]) -> Result<(), KError> {
-        if positions.len() != self.len() {
-            return Err(KError::SizeMismatchError { input_size: positions.len(), required_size: self.len() })
+        if positions.len() != self.num_movable_nodes() {
+            return Err(KError::SizeMismatchError { input_size: positions.len(), required_size: self.num_movable_nodes() })
         }
 
         for (node, pos) in self.nodes.iter().zip(positions.iter()) {
