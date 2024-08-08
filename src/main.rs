@@ -11,7 +11,7 @@ use std::cell::RefCell;
 
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
-use bevy_rapier3d::na::{Isometry3, Vector3};
+use bevy_rapier3d::na::{Isometry3, Translation3, UnitQuaternion, Vector3};
 use bevy_rapier3d::plugin::RapierPhysicsPlugin;
 use bevy_rapier3d::prelude::{Collider, RigidBody};
 use bevy_rapier3d::render::RapierDebugRenderPlugin;
@@ -120,15 +120,17 @@ pub fn update(
     };
 
     
-    let mut chain = create_test_chain();
+    let mut chain = create_leg();
     let mut solver = CyclicIKSolver {
         allowable_target_distance: 0.1,
-        allowable_target_angle: 1f32.to_radians(),
+        allowable_target_angle: 5f32.to_radians(),
         max_iterations: ui_state.max_iterations,
         per_joint_dampening: ui_state.damping
     };
 
-    #[allow(unused_must_use)] if false {
+    //solving
+    #[allow(unused_must_use)]
+    let solver_result = {
         solver.per_joint_dampening = 0.75;
         solver.max_iterations = 1;
         solver.forward_ascent(
@@ -164,21 +166,9 @@ pub fn update(
             else {
                 None
             }
-        );
-    }
+        )
+    };
 
-    {
-        solver.backwards_solve(
-            &mut chain,
-            target_pose,
-            if ui_state.debug_draw {
-                Some(&mut gizmos)
-            }
-            else {
-                None
-            }
-        );
-    }
 
     chain.update_world_transforms();
 
@@ -197,9 +187,9 @@ pub fn update(
         prev = joint_pos;
     }
 
-    // if solver_result.is_err() {
-    //     println!("{}", solver_result.err().unwrap());
-    // }
+    if solver_result.is_err() {
+        println!("{}", solver_result.err().unwrap());
+    }
 }
 
 fn create_test_chain() -> SerialKChain {
@@ -219,4 +209,49 @@ fn create_test_chain() -> SerialKChain {
     }
 
     SerialKChain::from_root(&base)
+}
+
+fn create_leg() -> SerialKChain {
+    let hip_r = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::y_axis() })
+        .limits_deg([-90., 0.])
+        .build();
+    let hip_p = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+        .limits_deg([-105., 15.])
+        .build();
+    let hip_y = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::z_axis() })
+        .limits_deg([-45., 0.])
+        .build();
+
+    
+    let knee_p = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+        .translation(Translation3::new(0., -0.8, 0.))
+        .limits_deg([0., 135.])
+        .build();
+    
+    let foot_p = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+        .translation(Translation3::new(0., -1., 0.))
+        .limits_deg([-30., 30.])
+        .build();
+    let toe = KNodeBuilder::new()
+        .joint_type(KJointType::Fixed)
+        .translation(Translation3::new(0., 0., 0.2))
+        .build();
+
+    chain_nodes![hip_r => hip_p => hip_y => knee_p => foot_p => toe];
+    let chain = SerialKChain::from_root(&hip_r);
+    chain.set_joint_positions_deg(&[
+        0.,
+        -45.,
+        0.,
+
+        90.,
+
+        0.,
+    ]).unwrap();
+    chain
 }
