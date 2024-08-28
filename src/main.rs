@@ -9,7 +9,7 @@ mod iterator;
 
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
-use bevy_rapier3d::na::{Isometry3, Translation3, UnitQuaternion, Vector3};
+use bevy_rapier3d::na::{Isometry3, Translation3, Vector3};
 use bevy_rapier3d::plugin::RapierPhysicsPlugin;
 use bevy_rapier3d::prelude::{Collider, RigidBody};
 use bevy_rapier3d::render::RapierDebugRenderPlugin;
@@ -17,7 +17,7 @@ use bevy::math::Vec3;
 use bevy::prelude::*;
 use chain::SerialKChain;
 use derivative::Derivative;
-use ik::CyclicIKSolver;
+use ik::{CyclicIKSolver, ForwardAscentCyclic, IKSolver};
 use node::{KJointType, KNodeBuilder};
 
 fn main() {
@@ -87,6 +87,34 @@ pub struct UiState {
     pub max_iterations: usize,
     #[derivative(Default(value="true"))]
     pub debug_draw: bool
+}
+
+pub struct SandboxContext {
+    pub kinematic_chain: SerialKChain,
+    pub solvers: Vec<Box<dyn IKSolver + Send>>
+}
+
+impl Default for SandboxContext {
+    fn default() -> Self {
+        Self {
+            kinematic_chain: create_test_chain(),
+            solvers: vec![]
+        }
+    }
+}
+
+pub fn sandbox_ui(
+    mut ctxs: EguiContexts,
+    mut sandbox_ctx: Local<SandboxContext>
+) {
+    let solver = Box::new(ForwardAscentCyclic::default()) as Box<dyn IKSolver + Send>;
+    sandbox_ctx.solvers.push(solver);
+    
+    egui::Window::new("Inverse Kinematics Sandbox").show(
+        ctxs.ctx_mut(), |ui| {
+            
+        }
+    );
 }
 
 pub fn update(
