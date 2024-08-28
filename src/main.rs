@@ -7,8 +7,6 @@ mod chain;
 mod node;
 mod iterator;
 
-use std::cell::RefCell;
-
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
 use bevy_rapier3d::na::{Isometry3, Translation3, UnitQuaternion, Vector3};
@@ -49,7 +47,7 @@ pub fn startup(
     //camera
     commands.spawn((
         Camera3dBundle {
-            transform: Transform::from_xyz(0., 2., 2.)
+            transform: Transform::from_xyz(-2., 2., 2.)
                 .looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         },
