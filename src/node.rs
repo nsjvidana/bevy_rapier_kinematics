@@ -7,11 +7,11 @@ use bevy_rapier3d::{math::Real, na::{Isometry3, Translation3, UnitQuaternion, Un
 
 use crate::iterator::KNodeChildren;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct KNodeData {
     pub parent: Option<Weak<Mutex<KNodeData>>>,
     pub child: Option<KNode>,
-    pub(crate) joint: KJoint,
+    pub joint: KJoint,
 }
 
 #[derive(Clone)]
@@ -89,6 +89,14 @@ impl KNodeBuilder {
         self
     }
 
+    pub fn limits_deg(mut self, limits: [Real; 2]) -> Self {
+        self.0.joint.limits = [
+            limits[0].to_radians(),
+            limits[1].to_radians(),
+        ];
+        self
+    }
+
     pub fn name(mut self, name: String) -> Self {
         self.0.joint.name = name;
         self
@@ -99,7 +107,7 @@ impl KNodeBuilder {
     }
 }
 
-#[derive(Derivative)]
+#[derive(Derivative, Clone)]
 #[derivative(Default)]
 pub struct KJoint {
     pub name: String,
@@ -152,11 +160,21 @@ impl KJoint {
         self
     }
 
+    pub fn increment_position(&mut self, increment: Real) -> &mut Self {
+        self.set_position_clamped(self.position + increment);
+        self
+    }
+
     #[inline]
     pub fn set_origin(&mut self, origin: Isometry3<Real>) -> &mut Self {
         self.origin = origin;
         self.clear_cache();
         self
+    }
+
+    #[inline]
+    pub fn origin(&self) -> &Isometry3<Real> {
+        &self.origin
     }
 
     pub fn new(joint_type: KJointType) -> Self {
@@ -191,7 +209,7 @@ impl KJoint {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub enum KJointType {
     #[default]
     Fixed,
@@ -222,12 +240,6 @@ pub enum KError {
         min_limit: Real,
         max_limit: Real,
     },
-    #[error("Solver incompatible with joint \"{0}\" of type {1}. Solver type: {2}", joint_name, joint_type, solver_type)]
-    SolverIncompatibleWithJointType {
-        joint_name: String,
-        joint_type: String,
-        solver_type: String
-    },
     #[error(
         "IK Solver of type {0} tried {1} times but did not converge. position_diff = {2}, angle_diff = {3}",
         solver_type,
@@ -240,6 +252,15 @@ pub enum KError {
         num_tries: usize,
         position_diff: Real,
         angle_diff: Real,
+    },
+    #[error(
+        "Size mismatch. input size = {0}, required size = {1}",
+        input_size,
+        required_size,
+    )]
+    SizeMismatchError {
+        input_size: usize,
+        required_size: usize
     }
 }
 

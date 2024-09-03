@@ -1,29 +1,10 @@
 use std::f32::consts::PI;
 use bevy::math::*;
 use bevy_rapier3d::math::Real;
-use bevy_rapier3d::na::{Matrix3, Rotation3, SimdRealField, UnitQuaternion, UnitVector3, Vector, Vector3};
+use bevy_rapier3d::na::{Matrix3, Quaternion, Rotation3, SimdRealField, UnitQuaternion, UnitVector3, Vector, Vector3, Vector4};
 use bevy_rapier3d::rapier::utils::SimdBasis;
 
 pub const FRAC_PI_12: f32 = PI/12.;
-
-pub trait Conversion<A, B> {
-    fn from(self, value: A) -> B;
-    fn into(self, value: B) -> A;
-}
-
-
-
-#[inline]
-pub fn project_onto_plane_k<T: k::RealField>(vector: &k::Vector3<T>, plane_normal: &k::nalgebra::UnitVector3<T>) -> k::Vector3<T> {
-    let normsq = plane_normal.norm_squared();
-    let dot = vector.dot(plane_normal);
-    let div = dot / normsq;
-    k::Vector3::<T>::new(
-        vector.x.clone() - plane_normal.x.clone() * div.clone(),
-        vector.y.clone() - plane_normal.y.clone() * div.clone(),
-        vector.z.clone() - plane_normal.z.clone() * div
-    )
-}
 
 #[inline]
 pub fn project_onto_plane(vector: &Vector3<Real>, plane_normal: &UnitVector3<Real>) -> Vector3<Real> {
@@ -42,11 +23,36 @@ pub fn project_onto_plane(vector: &Vector3<Real>, plane_normal: &UnitVector3<Rea
 /// 
 /// The angle that is returned comes with the appropriate sign for a right-handed rotation
 /// (Positive angle for counterclockwise rotation, negative for clockwise)
-pub fn angle_between(a: &Vector3<Real>, b: &Vector3<Real>, n: &UnitVector3<Real>) -> Real {
+pub fn angle_to(a: &Vector3<Real>, b: &Vector3<Real>, n: &UnitVector3<Real>) -> Real {
     SimdRealField::simd_atan2(
         a.cross(b).dot(n),
         a.dot(b)
     )
+}
+
+/// Computes a quaternion representing the shortest rotation from vector `a` to vector `b`.
+pub fn rotation_between_vectors(a: &Vector3<Real>, b: &Vector3<Real>) -> UnitQuaternion<Real> {
+    // let k_cos_theta = a.dot(b);
+    // let k = Real::sqrt(a.norm_squared() * b.norm_squared());
+    // if k_cos_theta / k == -1. {
+    //     let norm_ortho = a.orthonormal_vector();
+    //     UnitQuaternion::new_unchecked(
+    //         Quaternion::new(0., norm_ortho.x, norm_ortho.y, norm_ortho.z)
+    //     )
+    // }
+    // else {
+    //     let cross = a.cross(b);
+    //     UnitQuaternion::new_normalize(
+    //         Quaternion::new(k_cos_theta + k, cross.x, cross.y, cross.z)
+    //     )
+    // }
+
+    let axis = a.cross(b);
+    let q = Quaternion { coords: Vector4::new(
+        axis.x, axis.y, axis.z,
+        Real::sqrt(a.norm_squared() * b.norm_squared()) + a.dot(b)
+    )};
+    UnitQuaternion::new_normalize(q)
 }
 
 /// Returns a rotation's right, up, and forward vectors from a given forward vector.

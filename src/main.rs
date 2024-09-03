@@ -9,7 +9,7 @@ mod iterator;
 
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
-use bevy_rapier3d::na::{Isometry3, Vector3};
+use bevy_rapier3d::na::{Isometry3, Translation3, UnitQuaternion, Vector3};
 use bevy_rapier3d::plugin::RapierPhysicsPlugin;
 use bevy_rapier3d::prelude::{Collider, RigidBody};
 use bevy_rapier3d::render::RapierDebugRenderPlugin;
@@ -47,7 +47,7 @@ pub fn startup(
     //camera
     commands.spawn((
         Camera3dBundle {
-            transform: Transform::from_xyz(0., 2., 2.)
+            transform: Transform::from_xyz(-2., 2., 2.)
                 .looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         },
@@ -83,7 +83,10 @@ pub struct UiState {
     pub stepping_mode_enabled: bool,
     pub reset: bool,
     pub damping: f32,
+    #[derivative(Default(value="1"))]
     pub max_iterations: usize,
+    #[derivative(Default(value="true"))]
+    pub debug_draw: bool
 }
 
 pub fn update(
@@ -99,7 +102,9 @@ pub fn update(
         ui.checkbox(&mut ui_state.stepping_mode_enabled, "Enable Stepping");
         ui_state.reset = ui.button("Reset").clicked();
         ui.add(egui::Slider::new(&mut ui_state.damping, 0.0..=1.0).text("Damping"));
-        ui.add(egui::Slider::new(&mut ui_state.max_iterations, 0..=10).text("Max iterations"));
+        ui.add(egui::Slider::new(&mut ui_state.max_iterations, 1..=10).text("Max iterations"));
+
+        ui.checkbox(&mut ui_state.debug_draw, "Debug draw");
     });
     let mut targ_transform = target_q.get_single_mut().ok().unwrap();
 
@@ -107,22 +112,66 @@ pub fn update(
     let y_movement = (keys.pressed(KeyCode::KeyU) as i8 - keys.pressed(KeyCode::KeyJ) as i8) as f32;
     let z_movement = (keys.pressed(KeyCode::ArrowDown) as i8 - keys.pressed(KeyCode::ArrowUp) as i8) as f32;
     targ_transform.translation += Vec3::new(x_movement, y_movement, z_movement) * time.delta_seconds();
-
-    
-    let mut chain = create_test_chain();
-    let solver = CyclicIKSolver {
-        allowable_target_distance: 0.1,
-        allowable_target_angle: 1f32.to_radians(),
-        max_iterations: 8,
-        per_joint_dampening: 0.40
-    };
-    let solver_result = solver.solve(&mut chain, Isometry3 {
+    let target_pose = Isometry3 {
         rotation: targ_transform.rotation.into(),
         translation: targ_transform.translation.into(),
-    });
+    };
+
+    
+    let mut chain = create_leg();
+    let mut solver = CyclicIKSolver {
+        allowable_target_distance: 0.1,
+        allowable_target_angle: 5f32.to_radians(),
+        max_iterations: ui_state.max_iterations,
+        per_joint_dampening: ui_state.damping
+    };
+
+    //solving
+    #[allow(unused_must_use)]
+    let solver_result = {
+        solver.per_joint_dampening = 0.75;
+        solver.max_iterations = 1;
+        solver.forward_ascent(
+            &mut chain,
+            target_pose,
+            if ui_state.debug_draw{
+                Some(&mut gizmos)
+            }
+            else {
+                None
+            }
+        );
+        solver.per_joint_dampening = 0.5;
+        solver.forward_descent(
+            &mut chain,
+            target_pose,
+            if ui_state.debug_draw{
+                Some(&mut gizmos)
+            }
+            else {
+                None
+            }
+        );
+
+        solver.per_joint_dampening = 0.;
+        solver.max_iterations = 10;
+        solver.forward_descent(
+            &mut chain,
+            target_pose,
+            if ui_state.debug_draw{
+                Some(&mut gizmos)
+            }
+            else {
+                None
+            }
+        )
+    };
+
+
     chain.update_world_transforms();
 
     let mut prev = Vec3::ZERO;
+    let color = Color::linear_rgb(0., 0., 1.);
     for joint in chain.iter_joints() {
         let joint_pos: Vec3 = joint.world_transform().unwrap().translation.into();
         
@@ -130,9 +179,9 @@ pub fn update(
             joint_pos,
             default(),
             0.05,
-            Color::linear_rgb(0., 1., 0.)
+            color
         );
-        gizmos.line(prev, joint_pos, Color::linear_rgb(0., 0., 1.));
+        gizmos.line(prev, joint_pos, color);
         prev = joint_pos;
     }
 
@@ -146,12 +195,8 @@ fn create_test_chain() -> SerialKChain {
     let base = KNodeBuilder::new()
         .joint_type(KJointType::Revolute { axis: Vector3::y_axis() })
         .build();
-    let n1 = KNodeBuilder::new()
-        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
-        .build();
-    chain_nodes![base => n1];
 
-    let mut prev = n1.clone();
+    let mut prev = base.clone();
     for _ in 0..10 {
         let node = KNodeBuilder::new()
             .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
@@ -162,4 +207,49 @@ fn create_test_chain() -> SerialKChain {
     }
 
     SerialKChain::from_root(&base)
+}
+
+fn create_leg() -> SerialKChain {
+    let hip_r = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::y_axis() })
+        .limits_deg([-90., 0.])
+        .build();
+    let hip_p = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+        .limits_deg([-105., 15.])
+        .build();
+    let hip_y = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::z_axis() })
+        .limits_deg([-45., 0.])
+        .build();
+
+    
+    let knee_p = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+        .translation(Translation3::new(0., -0.8, 0.))
+        .limits_deg([0., 135.])
+        .build();
+    
+    let foot_p = KNodeBuilder::new()
+        .joint_type(KJointType::Revolute { axis: Vector3::x_axis() })
+        .translation(Translation3::new(0., -1., 0.))
+        .limits_deg([-30., 30.])
+        .build();
+    let toe = KNodeBuilder::new()
+        .joint_type(KJointType::Fixed)
+        .translation(Translation3::new(0., 0., 0.2))
+        .build();
+
+    chain_nodes![hip_r => hip_p => hip_y => knee_p => foot_p => toe];
+    let chain = SerialKChain::from_root(&hip_r);
+    chain.set_joint_positions_deg(&[
+        0.,
+        -45.,
+        0.,
+
+        90.,
+
+        0.,
+    ]).unwrap();
+    chain
 }
