@@ -7,6 +7,7 @@ mod chain;
 mod node;
 mod iterator;
 
+use bevy_egui::egui::ComboBox;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
 use bevy_rapier3d::na::{Isometry3, Translation3, Vector3};
@@ -17,7 +18,7 @@ use bevy::math::Vec3;
 use bevy::prelude::*;
 use chain::SerialKChain;
 use derivative::Derivative;
-use ik::{CyclicIKSolver, ForwardAscentCyclic, IKSolver};
+use ik::{CyclicIKSolver, ForwardAscentCyclic, ForwardDescentCyclic, IKSolver};
 use node::{KJointType, KNodeBuilder};
 
 fn main() {
@@ -29,7 +30,8 @@ fn main() {
         EguiPlugin
     ))
         .add_systems(Startup, startup)
-        .add_systems(Update, update);
+        .add_systems(Update, test_obj_movement)
+        .add_systems(Update, sandbox_ui);
 
     //flycam stuff
     app.add_plugins(NoCameraPlayerPlugin);
@@ -94,6 +96,11 @@ pub struct SandboxContext {
     pub solvers: Vec<Box<dyn IKSolver + Send>>
 }
 
+#[derive(Default)]
+pub struct SelectedVals {
+    pub selected_solver_idx: usize
+}
+
 impl Default for SandboxContext {
     fn default() -> Self {
         Self {
@@ -103,16 +110,46 @@ impl Default for SandboxContext {
     }
 }
 
+pub fn test_obj_movement(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut target_q: Query<&mut Transform, With<TestObject>>,
+    time: Res<Time>,
+) {
+    let mut targ_transform = target_q.get_single_mut().ok().unwrap();
+
+    let x_movement = (keys.pressed(KeyCode::ArrowRight) as i8 - keys.pressed(KeyCode::ArrowLeft) as i8) as f32;
+    let y_movement = (keys.pressed(KeyCode::KeyU) as i8 - keys.pressed(KeyCode::KeyJ) as i8) as f32;
+    let z_movement = (keys.pressed(KeyCode::ArrowDown) as i8 - keys.pressed(KeyCode::ArrowUp) as i8) as f32;
+    targ_transform.translation += Vec3::new(x_movement, y_movement, z_movement) * time.delta_seconds();
+    let target_pose = Isometry3 {
+        rotation: targ_transform.rotation.into(),
+        translation: targ_transform.translation.into(),
+    };
+}
+
 pub fn sandbox_ui(
     mut ctxs: EguiContexts,
-    mut sandbox_ctx: Local<SandboxContext>
+    mut sandbox_ctx: Local<SandboxContext>,
+    mut selected_vals: Local<SelectedVals>
 ) {
-    let solver = Box::new(ForwardAscentCyclic::default()) as Box<dyn IKSolver + Send>;
-    sandbox_ctx.solvers.push(solver);
+    let forward_ascent = Box::new(ForwardAscentCyclic::default()) as Box<dyn IKSolver + Send>;
+    let forward_descent = Box::new(ForwardDescentCyclic::default()) as Box<dyn IKSolver + Send>;
+    sandbox_ctx.solvers.push(forward_ascent);
+    sandbox_ctx.solvers.push(forward_descent);
     
     egui::Window::new("Inverse Kinematics Sandbox").show(
         ctxs.ctx_mut(), |ui| {
-            
+            let selected_solver_name = if let Some(solver) = sandbox_ctx.solvers.get(selected_vals.selected_solver_idx) {
+                solver.solver_name()
+            }
+            else { "-" };
+            ComboBox::from_label("Solver type")
+                .selected_text(selected_solver_name)
+                .show_ui(ui, |ui| {
+                    for (i, solver) in sandbox_ctx.solvers.iter().enumerate() {
+                        ui.selectable_value(&mut selected_vals.selected_solver_idx, i, solver.solver_name());
+                    }
+                });
         }
     );
 }
@@ -134,12 +171,8 @@ pub fn update(
 
         ui.checkbox(&mut ui_state.debug_draw, "Debug draw");
     });
-    let mut targ_transform = target_q.get_single_mut().ok().unwrap();
-
-    let x_movement = (keys.pressed(KeyCode::ArrowRight) as i8 - keys.pressed(KeyCode::ArrowLeft) as i8) as f32;
-    let y_movement = (keys.pressed(KeyCode::KeyU) as i8 - keys.pressed(KeyCode::KeyJ) as i8) as f32;
-    let z_movement = (keys.pressed(KeyCode::ArrowDown) as i8 - keys.pressed(KeyCode::ArrowUp) as i8) as f32;
-    targ_transform.translation += Vec3::new(x_movement, y_movement, z_movement) * time.delta_seconds();
+    
+    let targ_transform = target_q.get_single().unwrap();
     let target_pose = Isometry3 {
         rotation: targ_transform.rotation.into(),
         translation: targ_transform.translation.into(),

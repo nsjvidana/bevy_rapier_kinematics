@@ -392,6 +392,7 @@ pub trait IKSolver {
     fn solve_debug(&self, chain: &mut SerialKChain, target_pose: Isometry3<Real>, debug_gizmos: Option<&mut Gizmos>) -> Result<(), KError> {
         unimplemented!()
     }
+    fn solver_name(&self) -> &str;
 }
 
 impl IKSolver for ForwardAscentCyclic {
@@ -456,6 +457,10 @@ impl IKSolver for ForwardAscentCyclic {
             position_diff: dist_to_target,
             angle_diff: angle_to_target
         })
+    }
+
+    fn solver_name(&self) -> &str {
+        "Forward Ascent Cyclic"
     }
 }
 
@@ -524,6 +529,10 @@ impl IKSolver for ForwardDescentCyclic {
             position_diff: dist_to_target,
             angle_diff: angle_to_target
         })
+    }
+
+    fn solver_name(&self) -> &str {
+        "Forward Descent Cyclic"
     }
 }
 
@@ -873,5 +882,9 @@ impl IKSolver for BackwardsCyclic {
             position_diff: dist_to_target,
             angle_diff: 0.
         })
+    }
+
+    fn solver_name(&self) -> &str {
+        "Backwards Cyclic"
     }
 }
