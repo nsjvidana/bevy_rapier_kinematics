@@ -105,7 +105,10 @@ impl Default for SandboxContext {
     fn default() -> Self {
         Self {
             kinematic_chain: create_test_chain(),
-            solvers: vec![]
+            solvers: vec![
+                Box::new(ForwardAscentCyclic::default()) as Box<dyn IKSolver + Send>,
+                Box::new(ForwardDescentCyclic::default()) as Box<dyn IKSolver + Send>,
+            ]
         }
     }
 }
@@ -129,13 +132,11 @@ pub fn test_obj_movement(
 
 pub fn sandbox_ui(
     mut ctxs: EguiContexts,
-    mut sandbox_ctx: Local<SandboxContext>,
-    mut selected_vals: Local<SelectedVals>
+    sandbox_ctx: Local<SandboxContext>,
+    mut selected_vals: Local<SelectedVals>,
+    mut gizmos: Gizmos,
+    target_q: Query<&Transform, With<TestObject>>,
 ) {
-    let forward_ascent = Box::new(ForwardAscentCyclic::default()) as Box<dyn IKSolver + Send>;
-    let forward_descent = Box::new(ForwardDescentCyclic::default()) as Box<dyn IKSolver + Send>;
-    sandbox_ctx.solvers.push(forward_ascent);
-    sandbox_ctx.solvers.push(forward_descent);
     
     egui::Window::new("Inverse Kinematics Sandbox").show(
         ctxs.ctx_mut(), |ui| {
@@ -152,6 +153,38 @@ pub fn sandbox_ui(
                 });
         }
     );
+
+    let targ_transform = target_q.get_single().unwrap();
+    let target_pose = Isometry3 {
+        rotation: targ_transform.rotation.into(),
+        translation: targ_transform.translation.into(),
+    };
+
+    let mut chain = create_leg();
+
+    let solver_result = sandbox_ctx.solvers[selected_vals.selected_solver_idx]
+        .solve(&mut chain, target_pose);
+
+    chain.update_world_transforms();
+
+    let mut prev = Vec3::ZERO;
+    let color = Color::linear_rgb(0., 0., 1.);
+    for joint in chain.iter_joints() {
+        let joint_pos: Vec3 = joint.world_transform().unwrap().translation.into();
+        
+        gizmos.sphere(
+            joint_pos,
+            default(),
+            0.05,
+            color
+        );
+        gizmos.line(prev, joint_pos, color);
+        prev = joint_pos;
+    }
+
+    if solver_result.is_err() {
+        println!("{}", solver_result.err().unwrap());
+    }
 }
 
 pub fn update(
